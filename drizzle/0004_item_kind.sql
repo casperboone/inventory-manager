@@ -1,0 +1,1 @@
+ALTER TABLE `assortment_items` ADD `kind` text DEFAULT 'product' NOT NULL;

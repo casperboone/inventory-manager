@@ -1,0 +1,2 @@
+# The local database and cached images never belong in a deployment.
+data
