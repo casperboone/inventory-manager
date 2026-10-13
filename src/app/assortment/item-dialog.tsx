@@ -267,21 +267,25 @@ function ItemForm({
           />
         </div>
 
-        {item && !supplierHasImage && (
+        {item && (
           <div className="space-y-2">
             <Label>Image</Label>
             <ImagePicker
               itemId={item.id}
               hasOwnImage={item.hasOwnImage}
+              supplierItemNo={supplierHasImage ? item.itemNo : null}
               suggestions={suggestQueries({
                 name: name.trim() || item.name,
-                supplierDescription: product?.description ?? item.supplierDescription,
+                supplierDescription:
+                  product?.description ?? item.supplierDescription,
               })}
               onChanged={() => router.refresh()}
             />
             <p className="text-xs text-muted-foreground">
-              The supplier has no photo for this item, so pick one here. It is
-              stored with the item.
+              {supplierHasImage
+                ? "An image of our own replaces the supplier's photo everywhere."
+                : "The supplier has no photo for this item, so pick one here."}{" "}
+              It is stored with the item.
             </p>
           </div>
         )}
