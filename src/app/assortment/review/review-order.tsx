@@ -5,14 +5,13 @@ import Link from "next/link";
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
-  ImageOffIcon,
   Loader2Icon,
   ShoppingCartIcon,
   StickyNoteIcon,
   XCircleIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ProductImage } from "@/components/product-image";
+import { ItemImage } from "@/components/item-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -81,9 +80,13 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
           <ul className="divide-y divide-amber-200/70 dark:divide-amber-900/40">
             {review.manual.map((item) => (
               <li key={item.id} className="flex items-center gap-3 px-3 py-2">
-                <div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-background">
-                  <ImageOffIcon className="size-4 text-muted-foreground/50" />
-                </div>
+                <ItemImage
+                  itemId={item.id}
+                  itemNo={item.itemNo}
+                  hasOwnImage={item.hasOwnImage}
+                  imageStatus={item.imageStatus}
+                  alt={item.name}
+                />
                 <div className="min-w-0 flex-1">
                   <div className="font-medium">{item.name}</div>
                   <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
@@ -134,10 +137,12 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
           )}
           {review.lines.map((line) => (
             <li key={line.id} className="flex items-center gap-3 px-3 py-2">
-              <ProductImage
-                itemNo={line.itemNo!}
+              <ItemImage
+                itemId={line.id}
+                itemNo={line.itemNo}
+                hasOwnImage={line.hasOwnImage}
+                imageStatus={line.imageStatus}
                 alt={line.supplierDescription ?? line.name}
-                hasImage={line.imageStatus !== "none"}
               />
               <div className="min-w-0 flex-1">
                 <div className="font-medium">{line.name}</div>

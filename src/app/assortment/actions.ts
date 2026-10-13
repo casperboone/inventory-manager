@@ -12,6 +12,11 @@ import {
   type PickerProduct,
 } from "@/lib/assortment/queries";
 import { addToSupplierCart } from "@/lib/supplier/cart-service";
+import { deleteItemImage, saveItemImageFromUrl } from "@/lib/images/store";
+import {
+  searchProductImages,
+  type ImageCandidate,
+} from "@/lib/images/search";
 
 function failure(error: unknown, fallback: string) {
   return {
@@ -364,5 +369,43 @@ export async function addOrderToSupplierCart(options: {
     };
   } catch (error) {
     return failure(error, "Could not send the order.");
+  }
+}
+
+// Image search for items the supplier has no picture for.
+export async function searchItemImages(
+  query: string
+): Promise<
+  { ok: true; results: ImageCandidate[] } | { ok: false; error: string }
+> {
+  try {
+    return { ok: true as const, results: await searchProductImages(query) };
+  } catch (error) {
+    return failure(error, "Image search failed.");
+  }
+}
+
+export async function setItemImage(
+  itemId: number,
+  imageUrl: string,
+  sourceName?: string,
+  fallbackUrl?: string
+) {
+  try {
+    await saveItemImageFromUrl(itemId, imageUrl, sourceName, fallbackUrl);
+    revalidatePath("/assortment");
+    return { ok: true as const };
+  } catch (error) {
+    return failure(error, "Could not save the image.");
+  }
+}
+
+export async function removeItemImage(itemId: number) {
+  try {
+    await deleteItemImage(itemId);
+    revalidatePath("/assortment");
+    return { ok: true as const };
+  } catch (error) {
+    return failure(error, "Could not remove the image.");
   }
 }

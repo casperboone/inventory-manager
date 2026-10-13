@@ -2,6 +2,7 @@ import { asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import {
   assortmentCategories,
+  assortmentItemImages,
   assortmentItems,
   supplierProducts,
 } from "@/db/schema";
@@ -24,6 +25,8 @@ export type AssortmentRow = {
   unitPrice: number | null;
   imageStatus: "available" | "none" | null;
   supplierRemoved: boolean;
+  // An image of our own, used when the supplier has none.
+  hasOwnImage: boolean;
 };
 
 export type AssortmentCategoryWithItems = {
@@ -53,6 +56,7 @@ async function selectItems(archived: boolean) {
       unitPrice: supplierProducts.unitPrice,
       imageStatus: supplierProducts.imageStatus,
       removedAt: supplierProducts.removedAt,
+      ownImageId: assortmentItemImages.itemId,
     })
     .from(assortmentItems)
     .innerJoin(
@@ -62,6 +66,10 @@ async function selectItems(archived: boolean) {
     .leftJoin(
       supplierProducts,
       eq(assortmentItems.supplierProductId, supplierProducts.id)
+    )
+    .leftJoin(
+      assortmentItemImages,
+      eq(assortmentItemImages.itemId, assortmentItems.id)
     )
     .where(
       archived
@@ -103,6 +111,7 @@ function groupByCategory(
       unitPrice: row.unitPrice,
       imageStatus: row.imageStatus,
       supplierRemoved: row.removedAt !== null,
+      hasOwnImage: row.ownImageId !== null,
     });
   }
   return categories;

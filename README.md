@@ -43,6 +43,18 @@ The Google Sheets export was imported once with
 `npm run assortment:import -- <file.csv>` (skips ARCHIEF, order amounts start
 at zero). That script refuses to run when the assortment already has data.
 
+Items the supplier has no photo for can get an image of our own: the edit
+form searches Open Food Facts and Open Products Facts (free product databases,
+no key needed) using the supplier's product name, which works better than our
+own short label. Pick a result and it is downloaded, resized and stored with
+the item; a link can also be pasted. Setting `SERPER_API_KEY` adds a general image
+search (Google results through [serper.dev](https://serper.dev), 2500 free
+queries, no card) whose results are shown first, because they match the
+product better than the databases do. Google's own Custom Search JSON API is
+closed to new customers since 2026, so `GOOGLE_CSE_KEY`/`GOOGLE_CSE_ID` only
+work for accounts that already had access. Repeated searches are cached for
+15 minutes.
+
 Every row in the catalog (`/products`, and the import detail pages) also has a
 cart button for a one-off order: pick an amount and it goes straight into the
 supplier cart, without touching the assortment.
@@ -76,8 +88,16 @@ isn't cached yet gets a `202` while it is fetched in the background, and the
 page picks it up on a retry. Products the supplier has no image for are
 recorded in the database and render an icon without any request.
 
-`npm run supplier:images` pre-fetches images (4 at a time) so browsing never
-waits; `-- --limit 100` for a smaller run.
+Both the thumbnail and the larger version are re-encoded to webp before they
+are stored (96px and 500px), because the large one only feeds a 256px preview:
+roughly 10 KB per product instead of the 250 KB PNG the supplier serves. Our
+own images are resized the same way on download.
+
+| Command | |
+| --- | --- |
+| `npm run supplier:images` | Pre-fetch images for our assortment (4 at a time) |
+| `npm run supplier:images -- --catalog` | The whole catalog, ~33 MB of database |
+| `npm run images:compact` | Report on oversized cached images; `-- --apply` rewrites them |
 
 ## Deploying to Vercel
 

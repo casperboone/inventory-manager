@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
@@ -34,6 +35,8 @@ import {
   saveAssortmentItem,
   setItemArchived,
 } from "./actions";
+import { suggestQueries } from "@/lib/images/search";
+import { ImagePicker } from "./image-picker";
 import { ProductPicker } from "./product-picker";
 
 const NEW_CATEGORY = "new";
@@ -114,6 +117,11 @@ function ItemForm({
   // existing link by itself, whatever the form state looks like.
   const [unlinked, setUnlinked] = useState(false);
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  // Our own image is only offered when the supplier doesn't provide one.
+  const supplierHasImage =
+    !!item?.supplierProductId && item.imageStatus === "available";
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
@@ -258,6 +266,25 @@ function ItemForm({
             suggestion={name.trim() || undefined}
           />
         </div>
+
+        {item && !supplierHasImage && (
+          <div className="space-y-2">
+            <Label>Image</Label>
+            <ImagePicker
+              itemId={item.id}
+              hasOwnImage={item.hasOwnImage}
+              suggestions={suggestQueries({
+                name: name.trim() || item.name,
+                supplierDescription: product?.description ?? item.supplierDescription,
+              })}
+              onChanged={() => router.refresh()}
+            />
+            <p className="text-xs text-muted-foreground">
+              The supplier has no photo for this item, so pick one here. It is
+              stored with the item.
+            </p>
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="item-note">Note (optional)</Label>

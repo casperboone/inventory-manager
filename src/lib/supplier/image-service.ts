@@ -19,8 +19,10 @@ const IMAGE_TTL_MS = 30 * DAY_MS;
 export const NO_IMAGE_TTL_MS = 7 * DAY_MS;
 const MAX_CONCURRENT_FETCHES = 4;
 const THUMB_SIZE = 96;
-// Anything larger than this is served as a thumbnail only.
-const MAX_STORED_FULL_BYTES = 2 * 1024 * 1024;
+// The large version only feeds a 256px preview, so it is re-encoded rather
+// than stored as the supplier sends it: a 250 KB PNG becomes ~15 KB of webp,
+// which keeps the database small even with the whole catalog cached.
+export const FULL_SIZE = 500;
 
 // "(NOG) GEEN AFBEELDING BESCHIKBAAR" GIF the supplier serves for items
 // without an image.
@@ -53,6 +55,13 @@ async function makeThumb(body: Buffer) {
   return sharp(body)
     .resize(THUMB_SIZE, THUMB_SIZE, { fit: "inside", withoutEnlargement: true })
     .webp({ quality: 80 })
+    .toBuffer();
+}
+
+export async function makeFull(body: Buffer) {
+  return sharp(body)
+    .resize(FULL_SIZE, FULL_SIZE, { fit: "inside", withoutEnlargement: true })
+    .webp({ quality: 82 })
     .toBuffer();
 }
 
@@ -160,12 +169,11 @@ async function store(itemNo: string, body: Buffer | null) {
     return null;
   }
 
-  const thumb = await makeThumb(body);
-  const contentType = sniffContentType(body);
+  const [thumb, full] = await Promise.all([makeThumb(body), makeFull(body)]);
   const cached: CachedImage = {
     thumb,
-    full: body.length <= MAX_STORED_FULL_BYTES ? body : null,
-    fullContentType: contentType,
+    full,
+    fullContentType: "image/webp",
     fresh: true,
   };
 

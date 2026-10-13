@@ -1,7 +1,10 @@
 // Pre-fetches product images so browsing never waits on the supplier.
+// By default only the products in our own assortment, because caching the
+// whole catalog costs far more database space than it is worth.
 //
-//   npm run supplier:images              all products not checked yet
-//   npm run supplier:images -- --all     re-check products without an image too
+//   npm run supplier:images                 products in our assortment
+//   npm run supplier:images -- --catalog    the entire supplier catalog
+//   npm run supplier:images -- --all        also re-check ones without an image
 //   npm run supplier:images -- --limit 50
 import { config } from "dotenv";
 config({ path: [".env.local", ".env"], quiet: true });
@@ -22,12 +25,30 @@ async function main() {
   const all = process.argv.includes("--all");
   const limit = Number(arg("limit")) || undefined;
 
+  const { assortmentItems } = await import("@/db/schema");
+  const { inArray } = await import("drizzle-orm");
+  const catalogWide = process.argv.includes("--catalog");
+
+  // Which products to warm: everything, or only what we actually sell.
+  const assortmentProductIds = catalogWide
+    ? null
+    : (
+        await db
+          .select({ id: assortmentItems.supplierProductId })
+          .from(assortmentItems)
+      )
+        .map((row) => row.id)
+        .filter((id): id is number => id !== null);
+
   const products = await db
     .select({ itemNo: supplierProducts.itemNo })
     .from(supplierProducts)
     .where(
       and(
         isNull(supplierProducts.removedAt),
+        assortmentProductIds
+          ? inArray(supplierProducts.id, assortmentProductIds)
+          : undefined,
         all
           ? undefined
           : or(
@@ -38,7 +59,9 @@ async function main() {
     )
     .limit(limit ?? 100000);
 
-  console.log(`Warming ${products.length} product images…`);
+  console.log(
+    `Warming ${products.length} product images (${catalogWide ? "whole catalog" : "our assortment"})…`
+  );
   let done = 0;
   let failed = 0;
 

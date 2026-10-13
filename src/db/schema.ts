@@ -160,5 +160,20 @@ export const assortmentItems = sqliteTable(
   ]
 );
 
+// Our own image for an assortment item, used when the supplier has none.
+// Picked from an image search and stored here, so nothing depends on the
+// original URL staying alive.
+export const assortmentItemImages = sqliteTable("assortment_item_images", {
+  itemId: integer("item_id")
+    .primaryKey()
+    .references(() => assortmentItems.id, { onDelete: "cascade" }),
+  thumb: blob("thumb", { mode: "buffer" }).notNull().$type<Buffer>(),
+  full: blob("full", { mode: "buffer" }).notNull().$type<Buffer>(),
+  // Where it came from, so we can tell later where an image was found.
+  sourceUrl: text("source_url"),
+  sourceName: text("source_name"),
+  createdAt: createdAt(),
+});
+
 export type AssortmentCategory = typeof assortmentCategories.$inferSelect;
 export type AssortmentItem = typeof assortmentItems.$inferSelect;

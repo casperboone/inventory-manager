@@ -26,7 +26,6 @@ import {
   ArrowRightIcon,
   CheckIcon,
   GripVerticalIcon,
-  ImageOffIcon,
   MinusIcon,
   PencilIcon,
   PlusIcon,
@@ -36,7 +35,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
-import { ProductImage } from "@/components/product-image";
+import { ItemImage } from "@/components/item-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -565,17 +564,13 @@ function ItemRow({
         />
       )}
 
-      {item.itemNo ? (
-        <ProductImage
-          itemNo={item.itemNo}
-          alt={item.supplierDescription ?? item.name}
-          hasImage={item.imageStatus !== "none"}
-        />
-      ) : (
-        <div className="flex size-10 shrink-0 items-center justify-center rounded-md border bg-muted/50">
-          <ImageOffIcon className="size-4 text-muted-foreground/50" />
-        </div>
-      )}
+      <ItemImage
+        itemId={item.id}
+        itemNo={item.itemNo}
+        hasOwnImage={item.hasOwnImage}
+        imageStatus={item.imageStatus}
+        alt={item.supplierDescription ?? item.name}
+      />
 
       <button
         type="button"
