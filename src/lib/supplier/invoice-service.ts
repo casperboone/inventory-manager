@@ -60,6 +60,7 @@ function parseNumber(value: string | null | undefined): number | null {
 // The document endpoints answer 500 (or an error page) unless their own page
 // has been loaded in the same session first, so each session visits it once.
 const INVOICES_PAGE = "/Document/PostedDocuments/PostedInvoices";
+const CREDIT_MEMOS_PAGE = "/Document/PostedDocuments/PostedCreditMemos";
 const ORDERS_PAGE = "/Document/OpenOrders";
 const primed = new WeakMap<HttpClient, Set<string>>();
 
@@ -113,10 +114,17 @@ async function requestJson(
   return JSON.parse(text);
 }
 
-// The invoice overview, newest first.
+export type PostedKind = "PostedInvoices" | "PostedCreditMemos";
+
+function pageFor(kind: PostedKind) {
+  return kind === "PostedInvoices" ? INVOICES_PAGE : CREDIT_MEMOS_PAGE;
+}
+
+// The overview of posted invoices or credit notes, newest first.
 export async function fetchInvoiceList(
   start: number,
-  length: number
+  length: number,
+  kind: PostedKind = "PostedInvoices"
 ): Promise<{ invoices: InvoiceHeader[]; total: number }> {
   const payload = new URLSearchParams();
   payload.set("draw", "1");
@@ -135,10 +143,10 @@ export async function fetchInvoiceList(
   payload.set("search[value]", "");
   payload.set("search[regex]", "false");
 
-  const body = (await requestJson(
-    "/Document/GetPostedDocuments/PostedInvoices",
-    { body: payload }
-  )) as { data?: unknown[]; recordsTotal?: number };
+  const body = (await requestJson(`/Document/GetPostedDocuments/${kind}`, {
+    body: payload,
+    page: pageFor(kind),
+  })) as { data?: unknown[]; recordsTotal?: number };
 
   const invoices = (body.data ?? []).flatMap((row) => {
     const parsed = invoiceRowSchema.safeParse(row);
@@ -156,10 +164,12 @@ export async function fetchInvoiceList(
 }
 
 export async function fetchInvoiceLines(
-  documentNo: string
+  documentNo: string,
+  kind: PostedKind = "PostedInvoices"
 ): Promise<InvoiceLine[]> {
   const body = (await requestJson(
-    `/Document/GetPostedDocumentDetails/PostedInvoices/${encodeURIComponent(documentNo)}`
+    `/Document/GetPostedDocumentDetails/${kind}/${encodeURIComponent(documentNo)}`,
+    { page: pageFor(kind) }
   )) as unknown[];
 
   return (Array.isArray(body) ? body : []).flatMap((row) => {

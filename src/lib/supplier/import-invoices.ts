@@ -9,6 +9,7 @@ import {
   fetchOpenOrders,
   fetchOrderLines,
   pauseBetweenInvoices,
+  type PostedKind,
 } from "./invoice-service";
 
 // One run fetches at most this many invoices, so a run stays well inside the
@@ -21,6 +22,8 @@ export type InvoiceImportResult = {
   remaining: number;
   total: number;
   openOrders: number;
+  // Credit notes are imported too; their amounts count against the purchases.
+  creditMemos: number;
 };
 
 export async function importSupplierInvoices(
@@ -36,14 +39,43 @@ export async function importSupplierInvoices(
     ).map((row) => row.documentNo)
   );
 
-  // Walk the list newest first and collect the ones we don't have yet.
+  const invoices = await importPosted("PostedInvoices", known, batch);
+  // Credit notes are few, so whatever is left of the batch is plenty.
+  const creditMemos = await importPosted(
+    "PostedCreditMemos",
+    known,
+    Math.max(5, batch - invoices.imported)
+  );
+  const openOrders = await refreshOpenOrders();
+
+  const result = {
+    imported: invoices.imported,
+    lines: invoices.lines + creditMemos.lines,
+    remaining: invoices.remaining + creditMemos.remaining,
+    total: invoices.total,
+    openOrders,
+    creditMemos: creditMemos.imported,
+  };
+  logger.info(
+    `Invoice import: ${result.imported} invoices, ${result.creditMemos} credit notes, ${result.lines} lines, ${result.remaining} remaining, ${openOrders} open orders refreshed.`
+  );
+  return result;
+}
+
+// Walks a posted-document list newest first and stores the ones we lack.
+async function importPosted(
+  kind: PostedKind,
+  known: Set<string>,
+  batch: number
+) {
+  const documentType = kind === "PostedInvoices" ? "invoice" : "creditmemo";
   const missing: Awaited<ReturnType<typeof fetchInvoiceList>>["invoices"] = [];
   let total = 0;
   let start = 0;
   const pageSize = 100;
 
   while (true) {
-    const page = await fetchInvoiceList(start, pageSize);
+    const page = await fetchInvoiceList(start, pageSize, kind);
     total = page.total;
     for (const invoice of page.invoices) {
       if (!known.has(invoice.documentNo)) missing.push(invoice);
@@ -57,11 +89,12 @@ export async function importSupplierInvoices(
 
   for (const [index, invoice] of toImport.entries()) {
     if (index > 0) await pauseBetweenInvoices();
-    const lines = await fetchInvoiceLines(invoice.documentNo);
+    const lines = await fetchInvoiceLines(invoice.documentNo, kind);
 
     const statements: BatchItem<"sqlite">[] = [
       db.insert(supplierInvoices).values({
         documentNo: invoice.documentNo,
+        documentType,
         documentDate: invoice.documentDate,
         amount: invoice.amount,
         lineCount: lines.length,
@@ -69,6 +102,7 @@ export async function importSupplierInvoices(
       ...lines.map((line) =>
         db.insert(supplierInvoiceLines).values({
           documentNo: invoice.documentNo,
+          documentType,
           documentDate: invoice.documentDate,
           itemNo: line.itemNo,
           description: line.description,
@@ -79,23 +113,18 @@ export async function importSupplierInvoices(
         })
       ),
     ];
-    await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+    await db.batch(
+      statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
+    );
     lineCount += lines.length;
   }
 
-  const openOrders = await refreshOpenOrders();
-
-  const result = {
+  return {
     imported: toImport.length,
     lines: lineCount,
     remaining: missing.length - toImport.length,
     total,
-    openOrders,
   };
-  logger.info(
-    `Invoice import: ${result.imported} invoices, ${result.lines} lines, ${result.remaining} remaining, ${openOrders} open orders refreshed.`
-  );
-  return result;
 }
 
 // Open orders already know their discounts, weeks before the invoice follows.

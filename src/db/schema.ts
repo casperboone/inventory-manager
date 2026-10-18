@@ -109,7 +109,9 @@ export const supplierInvoices = sqliteTable("supplier_invoices", {
   documentNo: text("document_no").primaryKey(),
   // Posted invoices and still-open orders both carry line discounts; an open
   // order knows them right after ordering, weeks before its invoice.
-  documentType: text("document_type", { enum: ["invoice", "order"] })
+  documentType: text("document_type", {
+    enum: ["invoice", "creditmemo", "order"],
+  })
     .notNull()
     .default("invoice"),
   documentDate: integer("document_date", { mode: "timestamp" }),
@@ -125,7 +127,9 @@ export const supplierInvoiceLines = sqliteTable(
     documentNo: text("document_no")
       .notNull()
       .references(() => supplierInvoices.documentNo, { onDelete: "cascade" }),
-    documentType: text("document_type", { enum: ["invoice", "order"] })
+    documentType: text("document_type", {
+      enum: ["invoice", "creditmemo", "order"],
+    })
       .notNull()
       .default("invoice"),
     documentDate: integer("document_date", { mode: "timestamp" }),

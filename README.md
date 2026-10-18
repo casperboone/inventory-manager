@@ -69,6 +69,7 @@ as an order exists, in two places with the same shape:
 | --- | --- | --- |
 | Open orders | `/Document/GetOrderDetails/<no>` | Right after ordering |
 | Posted invoices | `/Document/GetPostedDocumentDetails/PostedInvoices/<no>` | Weeks later |
+| Credit notes | `/Document/GetPostedDocumentDetails/PostedCreditMemos/<no>` | With a refund |
 
 Both carry `Line_Discount_Percent` and `Amount` (the "regeltotaal", net of the
 discount). **Import invoices & orders** on the imports page reads invoices
@@ -89,6 +90,23 @@ price.
 `npm run supplier:invoices -- --batch 250` does the same from the command line.
 Both document endpoints answer with an error unless their own page has been
 loaded in the same session first, which the service handles.
+
+## Purchase History
+
+`/purchase-history` totals what we bought per year from the imported invoices and
+credit notes: number of invoices, products, units and the amount, plus the
+date of the last invoice in that year so you can tell whether a year is
+complete. Picking a year lists its products with units, the average unit price plus what
+a unit cost on the first and the last document of that year (so you can see
+which way it moved), the line discount on the last document of that year
+(with how it moved since the first one) and when it was last bought. Prices are what we actually paid, net of the
+discount. Any
+of those columns sorts the list; it opens on spend, highest first.
+
+Credit notes count against the totals. Orders that are not invoiced yet are
+left out, so a recent order only shows up once its invoice arrives. Deposits
+on crates and kegs ("emballage") are excluded by default, with a toggle to
+count them and a column showing what they came to. Amounts exclude VAT.
 
 ## Supplier import
 
