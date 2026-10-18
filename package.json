@@ -14,7 +14,8 @@
     "supplier:import": "tsx scripts/import-supplier.ts",
     "supplier:images": "tsx scripts/warm-images.ts",
     "assortment:import": "tsx scripts/import-assortment.ts",
-    "images:compact": "tsx scripts/compact-images.ts"
+    "images:compact": "tsx scripts/compact-images.ts",
+    "supplier:invoices": "tsx scripts/import-invoices.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",

@@ -35,6 +35,7 @@ import {
   XIcon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { DiscountBadge } from "@/components/discount-badge";
 import { ItemImage } from "@/components/item-image";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -587,6 +588,13 @@ function ItemRow({
         <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           {item.unitOfMeasure && <span>{item.unitOfMeasure}</span>}
           {item.unitPrice != null && <span>{formatPrice(item.unitPrice)}</span>}
+          {item.discount && item.discount.kind !== "unknown" && (
+            <DiscountBadge
+              status={item.discount}
+              unitPrice={item.unitPrice}
+              className="px-1 py-0 text-[10px]"
+            />
+          )}
           {!item.supplierProductId && (
             <Badge variant="outline" className="gap-1 text-amber-700">
               <AlertTriangleIcon className="size-3" />

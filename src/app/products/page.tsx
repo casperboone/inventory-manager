@@ -5,6 +5,7 @@ import { ImportButton } from "@/components/import-button";
 import { ProductsTable } from "@/components/products-table";
 import { Button } from "@/components/ui/button";
 import { formatDateTime, formatNumber } from "@/lib/format";
+import { getDiscountStatuses } from "@/lib/products/discounts";
 import {
   getLatestSuccessfulImport,
   getUnitsOfMeasure,
@@ -40,6 +41,7 @@ export default async function ProductsPage(props: PageProps<"/products">) {
   const page = Number(first(params.page)) || 1;
   const newInImportId = Number(first(params.new)) || undefined;
 
+  const discountFilter = first(params.discount);
   const [result, units, latestImport, importRunning] = await Promise.all([
     searchProducts({
       q,
@@ -47,6 +49,10 @@ export default async function ProductsPage(props: PageProps<"/products">) {
       status,
       assortment: first(params.assortment) === "1",
       newInImportId,
+      discount:
+        discountFilter === "yes" || discountFilter === "no" || discountFilter === "unknown"
+          ? discountFilter
+          : undefined,
       sort,
       dir,
       page,
@@ -55,6 +61,10 @@ export default async function ProductsPage(props: PageProps<"/products">) {
     getLatestSuccessfulImport(),
     isImportRunning(),
   ]);
+
+  const discounts = await getDiscountStatuses(
+    result.rows.map((product) => product.itemNo)
+  );
 
   // In an initial import every product is new, so there is nothing to highlight.
   const newHighlightImport =
@@ -139,6 +149,7 @@ export default async function ProductsPage(props: PageProps<"/products">) {
 
       <ProductsTable
         products={result.rows}
+        discounts={discounts}
         newImportId={newHighlightImport?.id}
         sorting={{
           sort,

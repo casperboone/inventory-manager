@@ -13,6 +13,16 @@ export function formatPrice(value: number | null | undefined) {
   return value == null ? "—" : priceFormat.format(value);
 }
 
+const dateFormat = new Intl.DateTimeFormat("en-GB", {
+  dateStyle: "medium",
+  timeZone: "Europe/Amsterdam",
+});
+
+// For things that only have a day, like an invoice date.
+export function formatDate(value: Date | null | undefined) {
+  return value ? dateFormat.format(value) : "—";
+}
+
 export function formatDateTime(value: Date | null | undefined) {
   return value ? dateTimeFormat.format(value) : "—";
 }

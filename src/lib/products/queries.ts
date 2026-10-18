@@ -29,6 +29,7 @@ export const SORTS = {
 
 export type ProductSort = keyof typeof SORTS;
 export type ProductStatus = "active" | "removed" | "all";
+export type DiscountFilter = "yes" | "no" | "unknown";
 
 export type ProductFilters = {
   q?: string;
@@ -37,6 +38,8 @@ export type ProductFilters = {
   assortment?: boolean;
   // Only products first seen in this import.
   newInImportId?: number;
+  // Filter on the line discount we last saw on an invoice.
+  discount?: DiscountFilter;
   sort?: ProductSort;
   dir?: "asc" | "desc";
   page?: number;
@@ -65,6 +68,22 @@ function searchCondition(q: string): SQL | undefined {
   );
 }
 
+// The discount lives in the invoice history: the latest line per product
+// tells us whether we get one.
+function discountCondition(filter: DiscountFilter): SQL {
+  const latestDiscount = sql`(
+    select l.discount_percent
+    from supplier_invoice_lines l
+    where l.item_no = ${supplierProducts.itemNo}
+    order by l.document_date desc, l.id desc
+    limit 1
+  )`;
+
+  if (filter === "unknown") return sql`${latestDiscount} is null`;
+  if (filter === "yes") return sql`coalesce(${latestDiscount}, 0) > 0`;
+  return sql`${latestDiscount} = 0`;
+}
+
 export async function searchProducts(filters: ProductFilters) {
   const status = filters.status ?? "active";
   const conditions = [
@@ -76,6 +95,7 @@ export async function searchProducts(filters: ProductFilters) {
     filters.newInImportId
       ? eq(supplierProducts.firstImportId, filters.newInImportId)
       : undefined,
+    filters.discount ? discountCondition(filters.discount) : undefined,
   ];
   const where = and(...conditions);
 

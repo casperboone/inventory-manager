@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ImportButton } from "@/components/import-button";
+import { InvoiceImportButton } from "@/components/invoice-import-button";
 import { ImportStatusBadge } from "@/components/import-status-badge";
 import {
   Table,
@@ -9,7 +10,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDateTime, formatDuration, formatNumber } from "@/lib/format";
+import {
+  formatDate,
+  formatDateTime,
+  formatDuration,
+  formatNumber,
+} from "@/lib/format";
+import { getDiscountSummary } from "@/lib/products/discounts";
 import { getImports, isImportRunning } from "@/lib/products/queries";
 
 // Always read the database at request time instead of prerendering at build.
@@ -22,10 +29,17 @@ export const maxDuration = 60;
 export const metadata = { title: "Imports · Inventory Manager" };
 
 export default async function ImportsPage() {
-  const [imports, importRunning] = await Promise.all([
+  const [imports, importRunning, discountSummary] = await Promise.all([
     getImports(),
     isImportRunning(),
+    getDiscountSummary(),
   ]);
+  const discounts = {
+    ...discountSummary,
+    // The supplier list is only consulted during an import; what we know is
+    // what we have read so far.
+    remaining: 0,
+  };
 
   return (
     <div className="space-y-5">
@@ -35,8 +49,17 @@ export default async function ImportsPage() {
           <p className="text-sm text-muted-foreground">
             Fetches the full Rust Food catalog and records what changed.
           </p>
+          <p className="text-sm text-muted-foreground">
+            {discounts.invoices} invoices read ·{" "}
+            {discounts.withDiscount} of {discounts.items} products have a line
+            discount
+            {discounts.latest && ` · last invoice ${formatDate(discounts.latest)}`}
+          </p>
         </div>
-        <ImportButton running={importRunning} />
+        <div className="flex flex-wrap gap-2">
+          <InvoiceImportButton remaining={discounts.remaining} />
+          <ImportButton running={importRunning} />
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-lg border bg-background">

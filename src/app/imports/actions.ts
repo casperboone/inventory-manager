@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { importSupplierProducts } from "@/lib/supplier/import-products";
+import { importSupplierInvoices } from "@/lib/supplier/import-invoices";
 
 export type ImportResult =
   | { ok: true; importId: number }
@@ -14,6 +15,37 @@ export async function runSupplierImport(): Promise<ImportResult> {
     return { ok: true, importId };
   } catch (error) {
     revalidatePath("/imports");
+    return {
+      ok: false,
+      error: error instanceof Error ? error.message : "Import failed.",
+    };
+  }
+}
+
+export type InvoiceImportActionResult =
+  | {
+      ok: true;
+      imported: number;
+      lines: number;
+      remaining: number;
+      openOrders: number;
+    }
+  | { ok: false; error: string };
+
+// Reads posted invoices for their line discounts ("regelkorting"), which the
+// supplier shows nowhere else.
+export async function runInvoiceImport(): Promise<InvoiceImportActionResult> {
+  try {
+    const result = await importSupplierInvoices();
+    revalidatePath("/", "layout");
+    return {
+      ok: true,
+      imported: result.imported,
+      lines: result.lines,
+      remaining: result.remaining,
+      openOrders: result.openOrders,
+    };
+  } catch (error) {
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Import failed.",

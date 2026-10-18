@@ -16,6 +16,13 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 
+const DISCOUNT_ITEMS = [
+  { value: "all", label: "Any discount" },
+  { value: "yes", label: "With discount" },
+  { value: "no", label: "Without" },
+  { value: "unknown", label: "Unknown" },
+];
+
 const STATUS_ITEMS = [
   { value: "active", label: "Available" },
   { value: "removed", label: "Removed" },
@@ -58,6 +65,7 @@ export function ProductFilters({ units }: { units: string[] }) {
     searchParams.has("unit") ||
     searchParams.has("status") ||
     searchParams.has("assortment") ||
+    searchParams.has("discount") ||
     searchParams.has("new");
 
   return (
@@ -112,6 +120,25 @@ export function ProductFilters({ units }: { units: string[] }) {
         </SelectTrigger>
         <SelectContent>
           {STATUS_ITEMS.map((item) => (
+            <SelectItem key={item.value} value={item.value}>
+              {item.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+
+      <Select
+        items={DISCOUNT_ITEMS}
+        value={searchParams.get("discount") ?? "all"}
+        onValueChange={(value) =>
+          update({ discount: value === "all" ? null : (value as string) })
+        }
+      >
+        <SelectTrigger className="w-36 bg-background">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {DISCOUNT_ITEMS.map((item) => (
             <SelectItem key={item.value} value={item.value}>
               {item.label}
             </SelectItem>

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
+import { DiscountBadge } from "@/components/discount-badge";
 import { ProductImage } from "@/components/product-image";
 import { QuickAddToCart } from "@/components/quick-add-to-cart";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import {
 import type { SupplierProduct } from "@/db/schema";
 import { formatPrice } from "@/lib/format";
 import { NO_IMAGE_TTL_MS } from "@/lib/supplier/image-service";
+import type { DiscountStatus } from "@/lib/products/discount-types";
 import type { ProductSort } from "@/lib/products/queries";
 import { cn } from "@/lib/utils";
 
@@ -36,6 +38,7 @@ const COLUMNS: Column[] = [
   { label: "Description", sort: "description" },
   { label: "Unit", sort: "unit", className: "w-24" },
   { label: "Price", sort: "price", className: "w-28 text-right" },
+  { label: "Discount", className: "w-28" },
   { label: "", className: "w-12" },
 ];
 
@@ -44,6 +47,7 @@ export function ProductsTable({
   sorting,
   newImportId,
   renderPrice,
+  discounts,
   emptyMessage = "No products found.",
 }: {
   products: SupplierProduct[];
@@ -51,6 +55,8 @@ export function ProductsTable({
   // Products first seen in this import get a "New" badge.
   newImportId?: number;
   renderPrice?: (product: SupplierProduct) => React.ReactNode;
+  // Line discount per item number, as last invoiced.
+  discounts?: Map<string, DiscountStatus>;
   emptyMessage?: string;
 }) {
   return (
@@ -132,6 +138,12 @@ export function ProductsTable({
                 {renderPrice
                   ? renderPrice(product)
                   : formatPrice(product.unitPrice)}
+              </TableCell>
+              <TableCell>
+                <DiscountBadge
+                  status={discounts?.get(product.itemNo)}
+                  unitPrice={product.unitPrice}
+                />
               </TableCell>
               <TableCell className="py-1 pr-1 text-right">
                 <QuickAddToCart

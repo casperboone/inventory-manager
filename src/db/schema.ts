@@ -103,6 +103,50 @@ export const supplierPriceChanges = sqliteTable(
 export type SupplierProduct = typeof supplierProducts.$inferSelect;
 export type SupplierImport = typeof supplierImports.$inferSelect;
 
+// Posted invoices, imported for their line discounts ("regelkorting"), which
+// the supplier exposes nowhere else: not in the catalog, not in the cart.
+export const supplierInvoices = sqliteTable("supplier_invoices", {
+  documentNo: text("document_no").primaryKey(),
+  // Posted invoices and still-open orders both carry line discounts; an open
+  // order knows them right after ordering, weeks before its invoice.
+  documentType: text("document_type", { enum: ["invoice", "order"] })
+    .notNull()
+    .default("invoice"),
+  documentDate: integer("document_date", { mode: "timestamp" }),
+  amount: real("amount"),
+  lineCount: integer("line_count").notNull().default(0),
+  importedAt: createdAt(),
+});
+
+export const supplierInvoiceLines = sqliteTable(
+  "supplier_invoice_lines",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    documentNo: text("document_no")
+      .notNull()
+      .references(() => supplierInvoices.documentNo, { onDelete: "cascade" }),
+    documentType: text("document_type", { enum: ["invoice", "order"] })
+      .notNull()
+      .default("invoice"),
+    documentDate: integer("document_date", { mode: "timestamp" }),
+    itemNo: text("item_no").notNull(),
+    description: text("description"),
+    quantity: real("quantity"),
+    unitPrice: real("unit_price"),
+    // The line discount as invoiced; varies a little per invoice because it
+    // is a fixed amount against a changing price.
+    discountPercent: real("discount_percent"),
+    amount: real("amount"),
+  },
+  (t) => [
+    index("supplier_invoice_lines_item_idx").on(t.itemNo, t.documentDate),
+    index("supplier_invoice_lines_document_idx").on(t.documentNo),
+  ]
+);
+
+export type SupplierInvoice = typeof supplierInvoices.$inferSelect;
+export type SupplierInvoiceLine = typeof supplierInvoiceLines.$inferSelect;
+
 // Cached supplier product images. They live in the database rather than on
 // disk so they survive on hosting without a persistent filesystem.
 export const supplierProductImages = sqliteTable("supplier_product_images", {

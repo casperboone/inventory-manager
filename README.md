@@ -59,6 +59,37 @@ Every row in the catalog (`/products`, and the import detail pages) also has a
 cart button for a one-off order: pick an amount and it goes straight into the
 supplier cart, without touching the assortment.
 
+## Line discounts (regelkorting)
+
+The supplier shows the line discount nowhere before ordering: the catalog JSON
+has no discount fields and the cart quotes the full price. It appears as soon
+as an order exists, in two places with the same shape:
+
+| Source | Endpoint | When |
+| --- | --- | --- |
+| Open orders | `/Document/GetOrderDetails/<no>` | Right after ordering |
+| Posted invoices | `/Document/GetPostedDocumentDetails/PostedInvoices/<no>` | Weeks later |
+
+Both carry `Line_Discount_Percent` and `Amount` (the "regeltotaal", net of the
+discount). **Import invoices & orders** on the imports page reads invoices
+(newest first, in batches, continuing where it left off) and re-reads the open
+orders every run, since those still change. An order that has been invoiced
+drops out of the open list and its rows are removed, leaving the invoice as
+the authority.
+
+The discount shown per product is the one on its most recent line, whether
+that is an open order or an invoice.
+Products we never ordered stay "unknown". Note that the catalog price is the
+price *after* this discount: comparing recent invoices with the catalog, the
+catalog matches the net price and never the gross. The discount therefore says
+where we have an agreement, not that something extra comes off at checkout.
+The discount per unit stays constant while the percentage moves with the
+price.
+
+`npm run supplier:invoices -- --batch 250` does the same from the command line.
+Both document endpoints answer with an error unless their own page has been
+loaded in the same session first, which the service handles.
+
 ## Supplier import
 
 The supplier webshop (DIN Online, `b2b-rustfood.dinonline.nl`) has no API. The

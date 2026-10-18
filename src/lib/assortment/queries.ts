@@ -1,5 +1,6 @@
 import { asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
+import type { DiscountStatus } from "@/lib/products/discount-types";
 import {
   assortmentCategories,
   assortmentItemImages,
@@ -27,6 +28,8 @@ export type AssortmentRow = {
   supplierRemoved: boolean;
   // An image of our own, used when the supplier has none.
   hasOwnImage: boolean;
+  // Line discount as last invoiced; only set for linked products.
+  discount?: DiscountStatus;
 };
 
 export type AssortmentCategoryWithItems = {
@@ -118,7 +121,26 @@ function groupByCategory(
 }
 
 export async function getAssortment() {
-  return groupByCategory(await selectItems(false));
+  const categories = groupByCategory(await selectItems(false));
+  await attachDiscounts(categories);
+  return categories;
+}
+
+// The line discount per item, looked up in one go for the whole page.
+async function attachDiscounts(categories: AssortmentCategoryWithItems[]) {
+  const { getDiscountStatuses } = await import("@/lib/products/discounts");
+  const itemNos = categories
+    .flatMap((category) => category.items)
+    .flatMap((item) => (item.itemNo ? [item.itemNo] : []));
+  const statuses = await getDiscountStatuses(itemNos);
+
+  for (const category of categories) {
+    for (const item of category.items) {
+      item.discount = item.itemNo
+        ? (statuses.get(item.itemNo) ?? { kind: "unknown" })
+        : undefined;
+    }
+  }
 }
 
 export async function getArchivedAssortment() {
