@@ -62,6 +62,7 @@ function parseNumber(value: string | null | undefined): number | null {
 const INVOICES_PAGE = "/Document/PostedDocuments/PostedInvoices";
 const CREDIT_MEMOS_PAGE = "/Document/PostedDocuments/PostedCreditMemos";
 const ORDERS_PAGE = "/Document/OpenOrders";
+const OPEN_ENTRIES_PAGE = "/Document/OpenEntries";
 const primed = new WeakMap<HttpClient, Set<string>>();
 
 async function ensurePrimed(http: HttpClient, page: string) {
@@ -258,6 +259,89 @@ export async function fetchOrderLines(
         discountPercent: parseNumber(parsed.data.Line_Discount_Percent),
         // The line total as ordered; net of the discount.
         amount: parseNumber(parsed.data.Amount),
+      },
+    ];
+  });
+}
+
+const openEntryRowSchema = z.looseObject({
+  Document_No: z.string().trim().min(1),
+  Document_Type: z.string().nullish(),
+  Document_Date: z.string().nullish(),
+  Description: z.string().nullish(),
+  Amount: z.string().nullish(),
+  Remaining_Amount: z.string().nullish(),
+  Due_Date: z.string().nullish(),
+  Pmt_Discount_Date: z.string().nullish(),
+});
+
+export type OpenEntry = {
+  documentNo: string;
+  documentType: "invoice" | "creditmemo";
+  documentDate: Date | null;
+  description: string | null;
+  // The order this invoice came from, when the description names one.
+  orderNo: string | null;
+  // Including VAT, unlike the amounts on the document lists.
+  amount: number | null;
+  remainingAmount: number | null;
+  dueDate: Date | null;
+  paymentDiscountDate: Date | null;
+};
+
+// What is still unpaid ("openstaande posten"): invoices waiting to be paid and
+// credit notes waiting to be settled.
+export async function fetchOpenEntries(): Promise<OpenEntry[]> {
+  const payload = new URLSearchParams();
+  payload.set("draw", "1");
+  [
+    "Document_Date",
+    "Document_Type",
+    "Document_No",
+    "Description",
+    "Amount",
+    "Remaining_Amount",
+    "Due_Date",
+    "Pmt_Discount_Date",
+  ].forEach((name, index) => {
+    payload.set(`columns[${index}][data]`, name);
+    payload.set(`columns[${index}][name]`, "");
+    payload.set(`columns[${index}][searchable]`, "true");
+    payload.set(`columns[${index}][orderable]`, "true");
+    payload.set(`columns[${index}][search][value]`, "");
+    payload.set(`columns[${index}][search][regex]`, "false");
+  });
+  payload.set("order[0][column]", "0");
+  payload.set("order[0][dir]", "desc");
+  payload.set("start", "0");
+  payload.set("length", "200");
+  payload.set("search[value]", "");
+  payload.set("search[regex]", "false");
+
+  const body = (await requestJson("/Document/GetOpenEntries", {
+    body: payload,
+    page: OPEN_ENTRIES_PAGE,
+  })) as { data?: unknown[] };
+
+  return (body.data ?? []).flatMap((row) => {
+    const parsed = openEntryRowSchema.safeParse(row);
+    if (!parsed.success) return [];
+    const data = parsed.data;
+    return [
+      {
+        documentNo: data.Document_No,
+        documentType:
+          data.Document_Type === "Credit_Memo"
+            ? ("creditmemo" as const)
+            : ("invoice" as const),
+        documentDate: parseDutchDate(data.Document_Date),
+        description: data.Description?.trim() || null,
+        // "Order WEB26-2128"; the only link back to the order.
+        orderNo: /\border\s+(\S+)/i.exec(data.Description ?? "")?.[1] ?? null,
+        amount: parseNumber(data.Amount),
+        remainingAmount: parseNumber(data.Remaining_Amount),
+        dueDate: parseDutchDate(data.Due_Date),
+        paymentDiscountDate: parseDutchDate(data.Pmt_Discount_Date),
       },
     ];
   });

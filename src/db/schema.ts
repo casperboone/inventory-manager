@@ -148,6 +148,32 @@ export const supplierInvoiceLines = sqliteTable(
   ]
 );
 
+// What is still unpaid, straight from the supplier's bookkeeping. Refreshed
+// as a whole on every document import: entries disappear once they are paid,
+// so there is nothing to keep.
+export const supplierOpenEntries = sqliteTable("supplier_open_entries", {
+  documentNo: text("document_no").primaryKey(),
+  documentType: text("document_type", { enum: ["invoice", "creditmemo"] })
+    .notNull()
+    .default("invoice"),
+  documentDate: integer("document_date", { mode: "timestamp" }),
+  description: text("description"),
+  // The order the invoice came from, parsed out of the description. This is
+  // the only place the supplier links the two.
+  orderNo: text("order_no"),
+  // Amounts here include VAT, unlike the document lists.
+  amount: real("amount"),
+  remainingAmount: real("remaining_amount"),
+  dueDate: integer("due_date", { mode: "timestamp" }),
+  // Last day the payment discount ("contantkorting") applies.
+  paymentDiscountDate: integer("payment_discount_date", { mode: "timestamp" }),
+  refreshedAt: integer("refreshed_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type SupplierOpenEntry = typeof supplierOpenEntries.$inferSelect;
+
 export type SupplierInvoice = typeof supplierInvoices.$inferSelect;
 export type SupplierInvoiceLine = typeof supplierInvoiceLines.$inferSelect;
 

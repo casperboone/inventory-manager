@@ -112,6 +112,16 @@ that have not been invoiced yet. Both open a document page with all its
 lines, the discount per line, what the discount saved and the total; item
 numbers link through to the catalog.
 
+### Outstanding
+
+`/financials/outstanding` is the supplier's own list of what is still unpaid
+("openstaande posten"): invoices waiting to be paid, plus credit notes that
+have not been settled against them, with what it adds up to and what is past
+its due date. Amounts include VAT, unlike everywhere else. The list is
+replaced on every document import, since entries simply disappear once they
+are paid. Anything overdue also shows next to the section header, so you
+notice it from any of these pages.
+
 ### Purchase History
 
 `/financials/purchase-history` totals what we bought per year from the imported invoices and

@@ -1,6 +1,8 @@
+import Link from "next/link";
 import { InvoiceImportButton } from "@/components/invoice-import-button";
-import { formatDate, formatNumber } from "@/lib/format";
+import { formatDate, formatNumber, formatPrice } from "@/lib/format";
 import { getDocumentSummary } from "@/lib/products/documents";
+import { getOpenEntries } from "@/lib/products/open-entries";
 import { FinancialsNav } from "./financials-nav";
 
 // Everything that comes from Rust Food's own bookkeeping sits behind one nav
@@ -10,7 +12,10 @@ export default async function FinancialsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const summary = await getDocumentSummary();
+  const [summary, open] = await Promise.all([
+    getDocumentSummary(),
+    getOpenEntries(),
+  ]);
 
   return (
     <div className="space-y-4">
@@ -25,6 +30,15 @@ export default async function FinancialsLayout({
             {summary.latestInvoice &&
               ` · last ${formatDate(summary.latestInvoice)}`}
           </p>
+          {/* Something past its due date is worth seeing without clicking. */}
+          {open.overdue > 0 && (
+            <Link
+              href="/financials/outstanding"
+              className="rounded-md bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive"
+            >
+              {formatPrice(open.overdue)} overdue
+            </Link>
+          )}
           <InvoiceImportButton />
         </div>
       </div>

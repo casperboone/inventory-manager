@@ -137,10 +137,15 @@ Fields, exactly as the portal's own JS declares its columns:
 
 **Open entries**: `Document_Date`, `Document_Type` (`Invoice` /
 `Credit_Memo`), `Document_No`, `Customer_No`, `Description`, `Currency_Code`,
-`Amount`, `Remaining_Amount`, `Due_Date`, `Pmt_Discount_Date`, `DSO`
-(age in days), `Download`. Amounts here are **including VAT**, unlike the
-document lists. `Description` reads like `Order WEB26-2128`, which is the
-only place the portal links an invoice back to the order it came from.
+`Amount`, `Remaining_Amount`, `Due_Date`, `Pmt_Discount_Date`, `DSO`,
+`Download`, plus a `Key` we have no use for. Amounts here are **including
+VAT**, unlike the document lists. `Description` reads like
+`Order WEB26-2128`, which is the only place the portal links an invoice back
+to the order it came from. `DSO` is labelled "Ouderdom (dagen)" but is the
+payment term, not the age: it reads 14 on an invoice that has been overdue
+for months, so days overdue are worked out from `Due_Date` instead. The
+`Download` column is a bit of HTML that gives away the document type in its
+url (`/Document/Download/VFC25-5578/Credit_Memo`).
 
 **Lines** (both posted documents and open orders): `Type`, `No`,
 `Description`, `Quantity`, `Unit_Price`, `Line_Discount_Percent`, `Amount`.

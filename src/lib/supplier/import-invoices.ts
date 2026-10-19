@@ -1,11 +1,16 @@
 import { desc, eq, inArray } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
-import { supplierInvoiceLines, supplierInvoices } from "@/db/schema";
+import {
+  supplierInvoiceLines,
+  supplierInvoices,
+  supplierOpenEntries,
+} from "@/db/schema";
 import { logger } from "@/lib/logger";
 import {
   fetchInvoiceLines,
   fetchInvoiceList,
+  fetchOpenEntries,
   fetchOpenOrders,
   fetchOrderLines,
   pauseBetweenInvoices,
@@ -24,6 +29,8 @@ export type InvoiceImportResult = {
   openOrders: number;
   // Credit notes are imported too; their amounts count against the purchases.
   creditMemos: number;
+  // Unpaid invoices and unsettled credit notes, refreshed as a whole.
+  openEntries: number;
 };
 
 export async function importSupplierInvoices(
@@ -47,6 +54,7 @@ export async function importSupplierInvoices(
     Math.max(5, batch - invoices.imported)
   );
   const openOrders = await refreshOpenOrders();
+  const openEntries = await refreshOpenEntries();
 
   const result = {
     imported: invoices.imported,
@@ -55,9 +63,10 @@ export async function importSupplierInvoices(
     total: invoices.total,
     openOrders,
     creditMemos: creditMemos.imported,
+    openEntries,
   };
   logger.info(
-    `Invoice import: ${result.imported} invoices, ${result.creditMemos} credit notes, ${result.lines} lines, ${result.remaining} remaining, ${openOrders} open orders refreshed.`
+    `Invoice import: ${result.imported} invoices, ${result.creditMemos} credit notes, ${result.lines} lines, ${result.remaining} remaining, ${openOrders} open orders and ${openEntries} open entries refreshed.`
   );
   return result;
 }
@@ -173,6 +182,30 @@ async function refreshOpenOrders(): Promise<number> {
   }
 
   return orders.length;
+}
+
+// Outstanding payments change without us doing anything (they are settled by
+// bank transfer), so the whole list is replaced on every run.
+async function refreshOpenEntries(): Promise<number> {
+  const entries = await fetchOpenEntries();
+  await db.delete(supplierOpenEntries);
+  if (entries.length === 0) return 0;
+
+  await db.insert(supplierOpenEntries).values(
+    entries.map((entry) => ({
+      documentNo: entry.documentNo,
+      documentType: entry.documentType,
+      documentDate: entry.documentDate,
+      description: entry.description,
+      orderNo: entry.orderNo,
+      amount: entry.amount,
+      remainingAmount: entry.remainingAmount,
+      dueDate: entry.dueDate,
+      paymentDiscountDate: entry.paymentDiscountDate,
+      refreshedAt: new Date(),
+    }))
+  );
+  return entries.length;
 }
 
 // An order that has been invoiced disappears from the open list; its rows are
