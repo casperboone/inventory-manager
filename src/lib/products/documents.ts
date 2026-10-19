@@ -129,6 +129,30 @@ export async function getDocument(documentNo: string) {
   };
 }
 
+// For the section header: how much we have, and how far it runs.
+export async function getDocumentSummary() {
+  const [row] = await db.all<{
+    invoices: number;
+    creditmemos: number;
+    orders: number;
+    latest: number | null;
+  }>(sql`
+    select
+      sum(document_type = 'invoice') as invoices,
+      sum(document_type = 'creditmemo') as creditmemos,
+      sum(document_type = 'order') as orders,
+      max(case when document_type = 'invoice' then document_date end) as latest
+    from supplier_invoices
+  `);
+
+  return {
+    invoices: row?.invoices ?? 0,
+    creditMemos: row?.creditmemos ?? 0,
+    orders: row?.orders ?? 0,
+    latestInvoice: row?.latest ? new Date(row.latest * 1000) : null,
+  };
+}
+
 export async function countDocuments() {
   const rows = await db
     .select({

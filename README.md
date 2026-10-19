@@ -97,6 +97,10 @@ Everything that comes from Rust Food's own bookkeeping sits behind one nav
 entry, since it is secondary to ordering: purchase history, invoices and
 orders.
 
+The section header says how much has been imported and how far it runs, with
+the import button right there, so you can check and top it up from the pages
+that use the data. (It is also still on the imports page.)
+
 `/financials/invoices` lists the posted invoices and credit notes, searchable
 by document number or by what is on them (searching "fireball" gives every
 invoice that product is on). `/financials/orders` does the same for orders
