@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatNumber, formatPrice } from "@/lib/format";
+import { formatDate, formatNumber } from "@/lib/format";
 import { getDocument } from "@/lib/products/documents";
 import { DocumentLines, DocumentTypeBadge } from "../../document-lines";
+import { DocumentMeta, DocumentTotals } from "../../document-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function OrderPage(
   const document = await getDocument(decodeURIComponent(documentNo));
   if (!document || document.header.documentType !== "order") notFound();
 
-  const { header, lines, totals } = document;
+  const { header, lines, totals, orderLinked } = document;
 
   return (
     <div className="space-y-4">
@@ -47,21 +48,11 @@ export default async function OrderPage(
         </span>
       </div>
 
+      <DocumentMeta header={header} orderLinked={orderLinked} />
+
       <DocumentLines lines={lines} />
 
-      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
-        {totals.discount > 0.005 && (
-          <span className="text-muted-foreground">
-            Line discount saved {formatPrice(totals.discount)}
-          </span>
-        )}
-        <span>
-          Order total excl. VAT{" "}
-          <strong className="tabular-nums">
-            {formatPrice(header.amount ?? totals.lines)}
-          </strong>
-        </span>
-      </div>
+      <DocumentTotals header={header} totals={totals} label="Order total excl. VAT" />
     </div>
   );
 }

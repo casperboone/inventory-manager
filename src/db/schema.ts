@@ -116,7 +116,23 @@ export const supplierInvoices = sqliteTable("supplier_invoices", {
     .default("invoice"),
   documentDate: integer("document_date", { mode: "timestamp" }),
   amount: real("amount"),
+  // What it comes to with VAT; the supplier lists both.
+  amountIncludingVat: real("amount_including_vat"),
   lineCount: integer("line_count").notNull().default(0),
+  // The order an invoice came from. Only known while the invoice is still
+  // unpaid, because the outstanding list is the one place that names it.
+  orderNo: text("order_no"),
+  // Fields the supplier carries but leaves empty for us; kept because they
+  // cost nothing and would otherwise need another import to fill in.
+  yourReference: text("your_reference"),
+  salespersonCode: text("salesperson_code"),
+  // Orders only.
+  requestedDeliveryDate: integer("requested_delivery_date", {
+    mode: "timestamp",
+  }),
+  promisedDeliveryDate: integer("promised_delivery_date", {
+    mode: "timestamp",
+  }),
   importedAt: createdAt(),
 });
 

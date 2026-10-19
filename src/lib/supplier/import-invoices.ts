@@ -38,20 +38,33 @@ export async function importSupplierInvoices(
 ): Promise<InvoiceImportResult> {
   const batch = options.batch ?? DEFAULT_BATCH;
 
-  const known = new Set(
-    (
-      await db
-        .select({ documentNo: supplierInvoices.documentNo })
-        .from(supplierInvoices)
-    ).map((row) => row.documentNo)
+  const stored = await db
+    .select({
+      documentNo: supplierInvoices.documentNo,
+      amountIncludingVat: supplierInvoices.amountIncludingVat,
+    })
+    .from(supplierInvoices);
+  const known = new Set(stored.map((row) => row.documentNo));
+  // Documents imported before we read these fields; filled in from the list,
+  // which costs nothing extra because we walk it anyway.
+  const incomplete = new Set(
+    stored
+      .filter((row) => row.amountIncludingVat == null)
+      .map((row) => row.documentNo)
   );
 
-  const invoices = await importPosted("PostedInvoices", known, batch);
+  const invoices = await importPosted(
+    "PostedInvoices",
+    known,
+    batch,
+    incomplete
+  );
   // Credit notes are few, so whatever is left of the batch is plenty.
   const creditMemos = await importPosted(
     "PostedCreditMemos",
     known,
-    Math.max(5, batch - invoices.imported)
+    Math.max(5, batch - invoices.imported),
+    incomplete
   );
   const openOrders = await refreshOpenOrders();
   const openEntries = await refreshOpenEntries();
@@ -75,10 +88,12 @@ export async function importSupplierInvoices(
 async function importPosted(
   kind: PostedKind,
   known: Set<string>,
-  batch: number
+  batch: number,
+  incomplete: Set<string>
 ) {
   const documentType = kind === "PostedInvoices" ? "invoice" : "creditmemo";
   const missing: Awaited<ReturnType<typeof fetchInvoiceList>>["invoices"] = [];
+  const toComplete: typeof missing = [];
   let total = 0;
   let start = 0;
   const pageSize = 100;
@@ -87,7 +102,11 @@ async function importPosted(
     const page = await fetchInvoiceList(start, pageSize, kind);
     total = page.total;
     for (const invoice of page.invoices) {
-      if (!known.has(invoice.documentNo)) missing.push(invoice);
+      if (!known.has(invoice.documentNo)) {
+        missing.push(invoice);
+      } else if (incomplete.has(invoice.documentNo)) {
+        toComplete.push(invoice);
+      }
     }
     start += page.invoices.length;
     if (page.invoices.length === 0 || start >= total) break;
@@ -106,6 +125,8 @@ async function importPosted(
         documentType,
         documentDate: invoice.documentDate,
         amount: invoice.amount,
+        amountIncludingVat: invoice.amountIncludingVat,
+        yourReference: invoice.yourReference,
         lineCount: lines.length,
       }),
       ...lines.map((line) =>
@@ -128,12 +149,32 @@ async function importPosted(
     lineCount += lines.length;
   }
 
+  await completeHeaders(toComplete);
+
   return {
     imported: toImport.length,
     lines: lineCount,
     remaining: missing.length - toImport.length,
     total,
   };
+}
+
+// Fills in the header fields of documents imported before we read them.
+async function completeHeaders(
+  documents: Awaited<ReturnType<typeof fetchInvoiceList>>["invoices"]
+) {
+  if (documents.length === 0) return;
+  const statements: BatchItem<"sqlite">[] = documents.map((document) =>
+    db
+      .update(supplierInvoices)
+      .set({
+        amountIncludingVat: document.amountIncludingVat,
+        yourReference: document.yourReference,
+      })
+      .where(eq(supplierInvoices.documentNo, document.documentNo))
+  );
+  await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
+  logger.info(`Filled in the header fields of ${documents.length} documents.`);
 }
 
 // Open orders already know their discounts, weeks before the invoice follows.
@@ -160,6 +201,11 @@ async function refreshOpenOrders(): Promise<number> {
         documentType: "order",
         documentDate: order.documentDate,
         amount: order.amount,
+        amountIncludingVat: order.amountIncludingVat,
+        yourReference: order.yourReference,
+        salespersonCode: order.salespersonCode,
+        requestedDeliveryDate: order.requestedDeliveryDate,
+        promisedDeliveryDate: order.promisedDeliveryDate,
         lineCount: lines.length,
       }),
       ...lines.map((line) =>
@@ -205,6 +251,21 @@ async function refreshOpenEntries(): Promise<number> {
       refreshedAt: new Date(),
     }))
   );
+  // The outstanding list is the only place that names the order an invoice
+  // came from, so the link is recorded while it is there to be had.
+  const linked = entries.filter((entry) => entry.orderNo);
+  if (linked.length > 0) {
+    const statements: BatchItem<"sqlite">[] = linked.map((entry) =>
+      db
+        .update(supplierInvoices)
+        .set({ orderNo: entry.orderNo })
+        .where(eq(supplierInvoices.documentNo, entry.documentNo))
+    );
+    await db.batch(
+      statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
+    );
+  }
+
   return entries.length;
 }
 

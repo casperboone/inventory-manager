@@ -148,8 +148,21 @@ for months, so days overdue are worked out from `Due_Date` instead. The
 url (`/Document/Download/VFC25-5578/Credit_Memo`).
 
 **Lines** (both posted documents and open orders): `Type`, `No`,
-`Description`, `Quantity`, `Unit_Price`, `Line_Discount_Percent`, `Amount`.
-`Amount` is the line total *after* the discount ("regeltotaal").
+`Description`, `Description_2`, `Quantity`, `Unit_Price`,
+`Line_Discount_Percent`, `Amount`, `Amount_Including_VAT`. `Amount` is the
+line total *after* the discount ("regeltotaal"); the last two are empty in
+practice.
+
+What is filled in for us and what is not: `Amount_Including_VAT` and the
+delivery dates on orders are real, `Your_Reference` and `Salesperson_Code`
+are always null (we never send a reference and have no account manager).
+They are stored anyway, since they cost nothing and the alternative is
+another pass over every document later.
+
+An invoice does not say which order it came from, anywhere — not in the
+list, not in its lines, not in its PDF. The outstanding list does, in its
+`Description`, so the link is recorded while the invoice is unpaid and is
+simply unknown for everything older.
 
 ### Their assortment, settings
 

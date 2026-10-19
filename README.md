@@ -109,8 +109,11 @@ that use the data. (It is also still on the imports page.)
 by document number or by what is on them (searching "fireball" gives every
 invoice that product is on). `/financials/orders` does the same for orders
 that have not been invoiced yet. Both open a document page with all its
-lines, the discount per line, what the discount saved and the total; item
-numbers link through to the catalog.
+lines, the discount per line, what the discount saved and the total, both
+excluding and including VAT; item numbers link through to the catalog. An
+order also says when it is promised, and an invoice which order it came
+from — the supplier only names that while the invoice is unpaid, so older
+invoices do not have it.
 
 ### Outstanding
 

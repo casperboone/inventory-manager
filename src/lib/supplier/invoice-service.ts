@@ -10,7 +10,13 @@ import {
 // Invoices are the only place the supplier shows the line discount
 // ("regelkorting"): the catalog, the cart and open orders all quote the gross
 // price. So the discount per product is learned from what we were invoiced.
-const INVOICE_COLUMNS = ["Document_Date", "Document_No", "Amount"];
+const INVOICE_COLUMNS = [
+  "Document_Date",
+  "Document_No",
+  "Amount",
+  "Amount_Including_VAT",
+  "Your_Reference",
+];
 const PAUSE_BETWEEN_INVOICES_MS = 250;
 
 const invoiceRowSchema = z.looseObject({
@@ -18,6 +24,8 @@ const invoiceRowSchema = z.looseObject({
   // dd-mm-yyyy
   Document_Date: z.string().nullish(),
   Amount: z.string().nullish(),
+  Amount_Including_VAT: z.string().nullish(),
+  Your_Reference: z.string().nullish(),
 });
 
 const invoiceLineSchema = z.looseObject({
@@ -33,7 +41,14 @@ const invoiceLineSchema = z.looseObject({
 export type InvoiceHeader = {
   documentNo: string;
   documentDate: Date | null;
+  // Excluding VAT, the way the supplier totals a document.
   amount: number | null;
+  amountIncludingVat: number | null;
+  yourReference: string | null;
+  // Orders carry a few fields of their own.
+  salespersonCode?: string | null;
+  requestedDeliveryDate?: Date | null;
+  promisedDeliveryDate?: Date | null;
 };
 
 export type InvoiceLine = {
@@ -157,6 +172,8 @@ export async function fetchInvoiceList(
         documentNo: parsed.data.Document_No,
         documentDate: parseDutchDate(parsed.data.Document_Date),
         amount: parseNumber(parsed.data.Amount),
+        amountIncludingVat: parseNumber(parsed.data.Amount_Including_VAT),
+        yourReference: parsed.data.Your_Reference?.trim() || null,
       },
     ];
   });
@@ -199,6 +216,11 @@ const openOrderRowSchema = z.looseObject({
   No: z.string().trim().min(1),
   Order_Date: z.string().nullish(),
   Amount: z.string().nullish(),
+  Amount_Including_VAT: z.string().nullish(),
+  Your_Reference: z.string().nullish(),
+  Salesperson_Code: z.string().nullish(),
+  Requested_Delivery_Date: z.string().nullish(),
+  Promised_Delivery_Date: z.string().nullish(),
 });
 
 // Orders placed but not yet invoiced. Their lines already carry the line
@@ -206,7 +228,16 @@ const openOrderRowSchema = z.looseObject({
 export async function fetchOpenOrders(): Promise<InvoiceHeader[]> {
   const payload = new URLSearchParams();
   payload.set("draw", "1");
-  ["Order_Date", "No", "Amount"].forEach((name, index) => {
+  [
+    "Order_Date",
+    "No",
+    "Amount",
+    "Amount_Including_VAT",
+    "Your_Reference",
+    "Salesperson_Code",
+    "Requested_Delivery_Date",
+    "Promised_Delivery_Date",
+  ].forEach((name, index) => {
     payload.set(`columns[${index}][data]`, name);
     payload.set(`columns[${index}][name]`, "");
     payload.set(`columns[${index}][searchable]`, "true");
@@ -234,6 +265,15 @@ export async function fetchOpenOrders(): Promise<InvoiceHeader[]> {
         documentNo: parsed.data.No,
         documentDate: parseDutchDate(parsed.data.Order_Date),
         amount: parseNumber(parsed.data.Amount),
+        amountIncludingVat: parseNumber(parsed.data.Amount_Including_VAT),
+        yourReference: parsed.data.Your_Reference?.trim() || null,
+        salespersonCode: parsed.data.Salesperson_Code?.trim() || null,
+        requestedDeliveryDate: parseDutchDate(
+          parsed.data.Requested_Delivery_Date
+        ),
+        promisedDeliveryDate: parseDutchDate(
+          parsed.data.Promised_Delivery_Date
+        ),
       },
     ];
   });

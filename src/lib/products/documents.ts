@@ -11,7 +11,15 @@ export type DocumentHeader = {
   documentType: DocumentType;
   documentDate: Date | null;
   amount: number | null;
+  amountIncludingVat: number | null;
   lineCount: number;
+  // Which order an invoice came from, when the outstanding list told us.
+  orderNo: string | null;
+  yourReference: string | null;
+  salespersonCode: string | null;
+  // Orders only, and the reason to open one: when it is coming.
+  requestedDeliveryDate: Date | null;
+  promisedDeliveryDate: Date | null;
 };
 
 export type DocumentLine = {
@@ -25,6 +33,24 @@ export type DocumentLine = {
 };
 
 export const DOCUMENTS_PAGE_SIZE = 50;
+
+function toHeader(
+  row: typeof supplierInvoices.$inferSelect
+): DocumentHeader {
+  return {
+    documentNo: row.documentNo,
+    documentType: row.documentType,
+    documentDate: row.documentDate,
+    amount: row.amount,
+    amountIncludingVat: row.amountIncludingVat,
+    lineCount: row.lineCount,
+    orderNo: row.orderNo,
+    yourReference: row.yourReference,
+    salespersonCode: row.salespersonCode,
+    requestedDeliveryDate: row.requestedDeliveryDate,
+    promisedDeliveryDate: row.promisedDeliveryDate,
+  };
+}
 
 function matching(search: string | undefined): SQL | undefined {
   const term = search?.trim();
@@ -67,13 +93,7 @@ export async function listDocuments(options: {
   ]);
 
   return {
-    documents: rows.map((row) => ({
-      documentNo: row.documentNo,
-      documentType: row.documentType,
-      documentDate: row.documentDate,
-      amount: row.amount,
-      lineCount: row.lineCount,
-    })),
+    documents: rows.map(toHeader),
     total,
     page,
     pageCount: Math.max(1, Math.ceil(total / DOCUMENTS_PAGE_SIZE)),
@@ -92,6 +112,15 @@ export async function getDocument(documentNo: string) {
     .where(eq(supplierInvoiceLines.documentNo, documentNo))
     .orderBy(supplierInvoiceLines.id);
 
+  // An order we still have a page for can be linked to; once it is invoiced
+  // it is dropped, and its number is only worth showing as a reference.
+  const order = header.orderNo
+    ? await db.query.supplierInvoices.findFirst({
+        where: eq(supplierInvoices.documentNo, header.orderNo),
+        columns: { documentNo: true },
+      })
+    : null;
+
   const lines: DocumentLine[] = rows.map((row) => ({
     itemNo: row.itemNo,
     description: row.description,
@@ -106,13 +135,8 @@ export async function getDocument(documentNo: string) {
   }));
 
   return {
-    header: {
-      documentNo: header.documentNo,
-      documentType: header.documentType,
-      documentDate: header.documentDate,
-      amount: header.amount,
-      lineCount: header.lineCount,
-    } satisfies DocumentHeader,
+    header: toHeader(header),
+    orderLinked: order != null,
     lines,
     // Handy on the page itself: what the lines add up to and what was saved.
     totals: {
