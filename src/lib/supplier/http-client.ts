@@ -28,6 +28,22 @@ export class HttpClient {
     });
   }
 
+  // One endpoint (the cart's bulk add) wants a JSON body instead of a form.
+  async postJson(
+    path: string,
+    payload: unknown,
+    headers: Record<string, string> = {}
+  ): Promise<Response> {
+    return this.request(path, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json; charset=UTF-8",
+        ...headers,
+      },
+      body: JSON.stringify(payload),
+    });
+  }
+
   hasCookie(name: string): boolean {
     return this.cookies.has(name);
   }

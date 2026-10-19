@@ -85,13 +85,27 @@ and it is what the cart's bulk endpoint wants. It is stored as
 | `POST /OrderConfirm/RefreshShoppingCart` | | Cart contents. |
 | `POST /OrderConfirm/PlaceOrder` | | **Never call this.** |
 
-`additems` takes `{"items": [[id, quantity, variant, unitOfMeasureCode, uniqueId], …]}`
+`additems` takes `{"items": [[id, quantity, variant, unitOfMeasureCode, key], …]}`
 with `content-type: application/json`, where `id` is the internal `Id` above,
 `variant` is null for us, `unitOfMeasureCode` is e.g. `FUST`/`TRAY`, and
-`uniqueId` is a correlation key the portal echoes back. It answers
-`{addedItems: [{Key: uniqueId, Value: shoppingCartItemId}], totalItems,
-totalQuantity, totalPrice, showOrderItemWarning}` — so a line that is missing
-from `addedItems` was not added.
+`key` is a correlation id the portal echoes back. It answers
+`{Success, addedItems: [{Key: key, Value: shoppingCartItemId}], totalItems,
+totalQuantity, totalPrice, Messages, showOrderItemWarning}`.
+
+Two things about that key, both found by trying:
+
+- **It has to be a uuid.** Their catalog page sends the `hdnUniqueId` of the
+  row, a fresh one per rendered row (it sits in the `QuantityHtml` field of
+  the catalog JSON), but any uuid we make up works just as well. Anything
+  that is not a uuid — an item number, say — makes the portal answer
+  `Success: false` with "Er is een probleem opgetreden…" and add nothing.
+- **A batch is all or nothing.** One line the portal will not take fails the
+  whole call, and `addedItems` comes back empty. So a failed batch says
+  nothing about which line was wrong: retry them one at a time with
+  `quickItemAdd` to find out, which is what the review screen does.
+
+No priming is needed for this one, and 3 lines go through in about 400 ms,
+against roughly that per line one at a time.
 
 The cart quotes the **gross** price: no line discount is visible there
 (verified against a product invoiced at 17.6% off).

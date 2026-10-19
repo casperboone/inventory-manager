@@ -33,8 +33,12 @@ the +/− buttons as a reference while ordering.
 "Review" (in the bar at the bottom) opens `/assortment/review`: notes and
 products without a usable catalog link are listed on top as things to handle
 yourself, followed by everything that goes into the supplier cart. "Add all to
-the supplier cart" posts each line to `/OrderConfirm/quickItemAdd`, with
+the supplier cart" sends the whole order in one request
+(`/Product/additems`, the call behind their own "add all" button), with
 optional checkboxes to reset the amounts and delete the notes afterwards.
+The supplier refuses such a batch as a whole over a single line it does not
+like, so anything that does not come back accepted is retried on its own
+(`/OrderConfirm/quickItemAdd`) to find out which product was the problem.
 Amounts are only reset for lines that were actually accepted, notes only when
 the whole order went through, and the order is refused when the list changed
 while you were reviewing. Placing the order itself still happens at Rust Food.
