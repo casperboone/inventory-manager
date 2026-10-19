@@ -190,3 +190,59 @@ export async function getPurchaseLines(
     firstDiscountPercent: row.first_discount_percent,
   }));
 }
+
+export type PurchaseDocumentLine = {
+  documentNo: string;
+  documentType: "invoice" | "creditmemo";
+  documentDate: Date | null;
+  quantity: number | null;
+  // What the supplier listed before the discount.
+  unitPrice: number | null;
+  // What a unit actually cost, discount included.
+  netUnitPrice: number | null;
+  discountPercent: number | null;
+  amount: number | null;
+};
+
+// Every document a product appears on, for the price progression behind a
+// single row. Limited to one year unless asked for everything.
+export async function getProductPurchaseHistory(
+  itemNo: string,
+  options?: { year?: string }
+): Promise<PurchaseDocumentLine[]> {
+  const yearFilter = options?.year
+    ? sql`and strftime('%Y', document_date, 'unixepoch') = ${options.year}`
+    : sql``;
+
+  const rows = await db.all<{
+    document_no: string;
+    document_type: "invoice" | "creditmemo";
+    document_date: number | null;
+    quantity: number | null;
+    unit_price: number | null;
+    discount_percent: number | null;
+    amount: number | null;
+  }>(sql`
+    select document_no, document_type, document_date, quantity, unit_price,
+           discount_percent, amount
+    from supplier_invoice_lines
+    where item_no = ${itemNo}
+      and document_type in ('invoice', 'creditmemo')
+      ${yearFilter}
+    order by document_date desc, id desc
+  `);
+
+  return rows.map((row) => ({
+    documentNo: row.document_no,
+    documentType: row.document_type,
+    documentDate: toDate(row.document_date),
+    quantity: row.quantity,
+    unitPrice: row.unit_price,
+    netUnitPrice:
+      row.quantity && row.quantity > 0 && row.amount != null
+        ? row.amount / row.quantity
+        : null,
+    discountPercent: row.discount_percent,
+    amount: row.amount,
+  }));
+}

@@ -23,6 +23,18 @@ export function formatDate(value: Date | null | undefined) {
   return value ? dateFormat.format(value) : "—";
 }
 
+const shortDateFormat = new Intl.DateTimeFormat("nl-NL", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "2-digit",
+  timeZone: "Europe/Amsterdam",
+});
+
+// For dense tables where a full date does not fit.
+export function formatShortDate(value: Date | null | undefined) {
+  return value ? shortDateFormat.format(value) : "—";
+}
+
 export function formatDateTime(value: Date | null | undefined) {
   return value ? dateTimeFormat.format(value) : "—";
 }

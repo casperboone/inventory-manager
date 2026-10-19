@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowDownIcon, ArrowUpIcon, CheckIcon } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
+import { PurchaseRows } from "./purchase-rows";
 import {
   Table,
   TableBody,
@@ -22,10 +22,6 @@ import { cn } from "@/lib/utils";
 export const dynamic = "force-dynamic";
 
 export const metadata = { title: "Purchase History · Inventory Manager" };
-
-const percentFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 1,
-});
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -58,7 +54,7 @@ function SortLink({
       className={cn(
         "inline-flex items-center gap-1 hover:text-foreground",
         align === "right" && "flex-row-reverse",
-        active ? "text-foreground" : "text-muted-foreground"
+        active ? "text-foreground" : "text-muted-foreground",
       )}
     >
       {children}
@@ -68,14 +64,14 @@ function SortLink({
 }
 
 export default async function PurchaseHistoryPage(
-  props: PageProps<"/purchase-history">
+  props: PageProps<"/financials/purchase-history">,
 ) {
   const params = await props.searchParams;
   const includeDeposits = first(params.deposits) === "1";
 
   const sortParam = first(params.sort);
   const sort: PurchaseSort = (PURCHASE_SORTS as readonly string[]).includes(
-    sortParam ?? ""
+    sortParam ?? "",
   )
     ? (sortParam as PurchaseSort)
     : "total";
@@ -100,7 +96,7 @@ export default async function PurchaseHistoryPage(
       else next.set(key, value);
     }
     const qs = next.toString();
-    return qs ? `/purchase-history?${qs}` : "/purchase-history";
+    return qs ? `/financials/purchase-history?${qs}` : "/financials/purchase-history";
   };
 
   return (
@@ -121,14 +117,14 @@ export default async function PurchaseHistoryPage(
             "flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm transition-colors",
             includeDeposits
               ? "bg-background font-medium"
-              : "text-muted-foreground hover:text-foreground"
+              : "text-muted-foreground hover:text-foreground",
           )}
           scroll={false}
         >
           <span
             className={cn(
               "flex size-4 items-center justify-center rounded border",
-              includeDeposits && "bg-primary text-primary-foreground"
+              includeDeposits && "bg-primary text-primary-foreground",
             )}
           >
             {includeDeposits && <CheckIcon className="size-3" />}
@@ -163,7 +159,10 @@ export default async function PurchaseHistoryPage(
           <TableBody>
             {years.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={7}
+                  className="h-24 text-center text-sm text-muted-foreground"
+                >
                   No invoices imported yet.
                 </TableCell>
               </TableRow>
@@ -173,7 +172,7 @@ export default async function PurchaseHistoryPage(
                 key={year.year}
                 className={cn(
                   "relative",
-                  year.year === selectedYear && "bg-primary/5"
+                  year.year === selectedYear && "bg-primary/5",
                 )}
               >
                 <TableCell className="font-medium">
@@ -245,125 +244,74 @@ export default async function PurchaseHistoryPage(
                     Item no.
                   </TableHead>
                   <TableHead>
-                    <SortLink column="description" sort={sort} dir={dir} href={href}>
+                    <SortLink
+                      column="description"
+                      sort={sort}
+                      dir={dir}
+                      href={href}
+                    >
                       <span className="sm:hidden">Product</span>
                       <span className="hidden sm:inline">Description</span>
                     </SortLink>
                   </TableHead>
                   <TableHead className="w-12 text-right sm:w-20">
-                    <SortLink column="quantity" sort={sort} dir={dir} href={href} align="right">
+                    <SortLink
+                      column="quantity"
+                      sort={sort}
+                      dir={dir}
+                      href={href}
+                      align="right"
+                    >
                       Units
                     </SortLink>
                   </TableHead>
                   <TableHead className="hidden w-28 text-right sm:table-cell">
-                    <SortLink column="price" sort={sort} dir={dir} href={href} align="right">
+                    <SortLink
+                      column="price"
+                      sort={sort}
+                      dir={dir}
+                      href={href}
+                      align="right"
+                    >
                       Avg price
                     </SortLink>
                   </TableHead>
                   <TableHead className="w-14 text-right sm:w-24">
-                    <SortLink column="discount" sort={sort} dir={dir} href={href} align="right">
+                    <SortLink
+                      column="discount"
+                      sort={sort}
+                      dir={dir}
+                      href={href}
+                      align="right"
+                    >
                       <span className="sm:hidden">Disc.</span>
                       <span className="hidden sm:inline">Discount</span>
                     </SortLink>
                   </TableHead>
                   <TableHead className="w-24 text-right sm:w-28">
-                    <SortLink column="total" sort={sort} dir={dir} href={href} align="right">
+                    <SortLink
+                      column="total"
+                      sort={sort}
+                      dir={dir}
+                      href={href}
+                      align="right"
+                    >
                       Total
                     </SortLink>
                   </TableHead>
                   <TableHead className="hidden w-32 sm:table-cell">
-                    <SortLink column="lastBought" sort={sort} dir={dir} href={href}>
+                    <SortLink
+                      column="lastBought"
+                      sort={sort}
+                      dir={dir}
+                      href={href}
+                    >
                       Last bought
                     </SortLink>
                   </TableHead>
                 </TableRow>
               </TableHeader>
-              <TableBody>
-                {lines.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={7} className="h-24 text-center text-sm text-muted-foreground">
-                      Nothing bought in this year.
-                    </TableCell>
-                  </TableRow>
-                )}
-                {lines.map((line) => (
-                  <TableRow key={line.itemNo}>
-                    <TableCell className="hidden font-mono text-xs sm:table-cell">
-                      {line.itemNo}
-                    </TableCell>
-                    <TableCell className="min-w-28 break-words whitespace-normal">
-                      {line.description}
-                      {line.total < 0 && (
-                        <Badge variant="outline" className="ml-2">
-                          credited
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatNumber(Math.round(line.quantity))}
-                    </TableCell>
-                    <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                      <span className="text-muted-foreground">
-                        {line.averageUnitPrice == null
-                          ? "—"
-                          : formatPrice(line.averageUnitPrice)}
-                      </span>
-                      {/* First and last price of the year, so you can see
-                          which way it went. Only shown when it moved. */}
-                      {line.firstUnitPrice != null &&
-                        line.lastUnitPrice != null &&
-                        Math.abs(line.lastUnitPrice - line.firstUnitPrice) >
-                          0.005 && (
-                          <span
-                            className={cn(
-                              "block text-[11px]",
-                              line.lastUnitPrice > line.firstUnitPrice
-                                ? "text-red-600/80 dark:text-red-400/80"
-                                : "text-emerald-700/80 dark:text-emerald-400/80"
-                            )}
-                          >
-                            {formatPrice(line.firstUnitPrice)} →{" "}
-                            {formatPrice(line.lastUnitPrice)}
-                          </span>
-                        )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {line.discountPercent ? (
-                        <span className="text-xs font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
-                          −{percentFormat.format(line.discountPercent)}%
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                      {/* How the discount moved over the year; a bigger
-                          discount at the end is the good direction. */}
-                      {line.firstDiscountPercent != null &&
-                        line.discountPercent != null &&
-                        Math.abs(
-                          line.discountPercent - line.firstDiscountPercent
-                        ) > 0.005 && (
-                          <span
-                            className={cn(
-                              "block text-[11px] tabular-nums",
-                              line.discountPercent > line.firstDiscountPercent
-                                ? "text-emerald-700/80 dark:text-emerald-400/80"
-                                : "text-red-600/80 dark:text-red-400/80"
-                            )}
-                          >
-                            {percentFormat.format(line.firstDiscountPercent)} →{" "}
-                            {percentFormat.format(line.discountPercent)}%
-                          </span>
-                        )}
-                    </TableCell>
-                    <TableCell className="text-right font-medium tabular-nums">
-                      {formatPrice(line.total)}
-                    </TableCell>
-                    <TableCell className="hidden text-sm text-muted-foreground sm:table-cell">
-                      {formatDate(line.lastBoughtAt)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
+              <PurchaseRows lines={lines} year={selected.year} />
             </Table>
           </div>
 

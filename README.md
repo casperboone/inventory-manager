@@ -91,9 +91,22 @@ price.
 Both document endpoints answer with an error unless their own page has been
 loaded in the same session first, which the service handles.
 
-## Purchase History
+## Rust Financials
 
-`/purchase-history` totals what we bought per year from the imported invoices and
+Everything that comes from Rust Food's own bookkeeping sits behind one nav
+entry, since it is secondary to ordering: purchase history, invoices and
+orders.
+
+`/financials/invoices` lists the posted invoices and credit notes, searchable
+by document number or by what is on them (searching "fireball" gives every
+invoice that product is on). `/financials/orders` does the same for orders
+that have not been invoiced yet. Both open a document page with all its
+lines, the discount per line, what the discount saved and the total; item
+numbers link through to the catalog.
+
+### Purchase History
+
+`/financials/purchase-history` totals what we bought per year from the imported invoices and
 credit notes: number of invoices, products, units and the amount, plus the
 date of the last invoice in that year so you can tell whether a year is
 complete. Picking a year lists its products with units, the average unit price plus what
@@ -102,6 +115,12 @@ which way it moved), the line discount on the last document of that year
 (with how it moved since the first one) and when it was last bought. Prices are what we actually paid, net of the
 discount. Any
 of those columns sorts the list; it opens on spend, highest first.
+
+Clicking a product opens every document it appears on, with the quantity,
+price, discount and line total per document. Documents where the price or the
+discount moved against the one before are highlighted, with an arrow on the
+figure that changed, so the handful of moments that matter stand out. It opens on the selected year and switches to all
+years in one click. Document numbers link straight to the invoice.
 
 Credit notes count against the totals. Orders that are not invoiced yet are
 left out, so a recent order only shows up once its invoice arrives. Deposits
