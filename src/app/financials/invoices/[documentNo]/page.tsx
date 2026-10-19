@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, FileTextIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatNumber } from "@/lib/format";
 import { getDocument } from "@/lib/products/documents";
@@ -46,6 +46,23 @@ export default async function InvoicePage(
         <span className="text-sm text-muted-foreground">
           {formatDate(header.documentDate)} · {formatNumber(lines.length)} lines
         </span>
+        {/* The supplier's own PDF, fetched with our session. */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="sm:ml-auto"
+          nativeButton={false}
+          render={
+            <a
+              href={`/api/documents/${encodeURIComponent(header.documentNo)}`}
+              target="_blank"
+              rel="noreferrer"
+            />
+          }
+        >
+          <FileTextIcon />
+          PDF
+        </Button>
       </div>
 
       <DocumentMeta header={header} orderLinked={orderLinked} />

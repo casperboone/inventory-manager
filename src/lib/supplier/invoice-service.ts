@@ -386,3 +386,41 @@ export async function fetchOpenEntries(): Promise<OpenEntry[]> {
     ];
   });
 }
+
+// The supplier's own PDF of a posted document. Orders have none: the portal
+// only offers a download once a document has been posted.
+export async function fetchDocumentPdf(
+  documentNo: string,
+  documentType: "invoice" | "creditmemo",
+  retry = true
+): Promise<{ body: ArrayBuffer; contentType: string } | null> {
+  const session = getSupplierSession();
+  const http = await session;
+  const kind = documentType === "creditmemo" ? "Credit_Memo" : "Invoice";
+
+  const response = await http.get(
+    `/Document/Download/${encodeURIComponent(documentNo)}/${kind}`,
+    {
+      accept: "application/pdf,*/*",
+      referer: `${supplierConfig.baseUrl}${pageFor(
+        documentType === "creditmemo" ? "PostedCreditMemos" : "PostedInvoices"
+      )}`,
+    }
+  );
+
+  if (isLoginRedirect(response)) {
+    resetSupplierSession(session);
+    if (retry) return fetchDocumentPdf(documentNo, documentType, false);
+    throw new Error("Supplier session could not be re-established.");
+  }
+  // A document the supplier has no PDF for answers with its error page.
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error(`Supplier answered ${response.status} for ${documentNo}.`);
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.includes("pdf")) return null;
+
+  return { body: await response.arrayBuffer(), contentType: "application/pdf" };
+}

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { AlertTriangleIcon } from "lucide-react";
+import { AlertTriangleIcon, FileTextIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -80,13 +80,14 @@ export default async function OutstandingPage() {
               <TableHead className="hidden sm:table-cell">Order</TableHead>
               <TableHead className="w-24 sm:w-28">Due</TableHead>
               <TableHead className="w-24 text-right">Amount</TableHead>
+              <TableHead className="w-8" />
             </TableRow>
           </TableHeader>
           <TableBody>
             {entries.length === 0 && (
               <TableRow>
                 <TableCell
-                  colSpan={5}
+                  colSpan={6}
                   className="h-24 text-center text-muted-foreground"
                 >
                   Nothing outstanding. Import the documents to check again.
@@ -144,6 +145,18 @@ export default async function OutstandingPage() {
                   )}
                 >
                   {formatPrice(entry.remainingAmount)}
+                </TableCell>
+                <TableCell className="text-right">
+                  {/* Above the row link, so the PDF wins over the document. */}
+                  <a
+                    href={`/api/documents/${encodeURIComponent(entry.documentNo)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={`PDF of ${entry.documentNo}`}
+                    className="relative z-10 inline-flex text-muted-foreground hover:text-foreground"
+                  >
+                    <FileTextIcon className="size-4" />
+                  </a>
                 </TableCell>
               </TableRow>
             ))}

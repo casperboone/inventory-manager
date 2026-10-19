@@ -122,7 +122,7 @@ All of these need their page primed first.
 | `/Document/OpenOrders` | `POST /Document/GetOpenOrders` | Orders not yet invoiced |
 | idem | `GET /Document/GetOrderDetails/<no>` | Lines |
 | `/Document/OpenEntries` | `POST /Document/GetOpenEntries` | Outstanding payments |
-| | `GET /Document/Download/<no>/Invoice` | The invoice PDF (`application/pdf`, `filename=<no>.pdf`, ~250 KB) |
+| | `GET /Document/Download/<no>/<type>` | The document's PDF, see below |
 
 Fields, exactly as the portal's own JS declares its columns:
 
@@ -146,6 +146,13 @@ payment term, not the age: it reads 14 on an invoice that has been overdue
 for months, so days overdue are worked out from `Due_Date` instead. The
 `Download` column is a bit of HTML that gives away the document type in its
 url (`/Document/Download/VFC25-5578/Credit_Memo`).
+
+The download is `GET /Document/Download/<no>/<type>` with `type` being
+`Invoice` or `Credit_Memo`, and it has to match the document: asking for a
+credit note as `Invoice` answers 404, as does any order, which has no PDF
+until it is invoiced. It needs no priming, only the session, and answers
+`application/pdf` with `filename=<no>.pdf`. Every one of them is exactly
+253,952 bytes, so that is the template, not a coincidence.
 
 **Lines** (both posted documents and open orders): `Type`, `No`,
 `Description`, `Description_2`, `Quantity`, `Unit_Price`,

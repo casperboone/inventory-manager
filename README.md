@@ -115,6 +115,11 @@ order also says when it is promised, and an invoice which order it came
 from — the supplier only names that while the invoice is unpaid, so older
 invoices do not have it.
 
+An invoice or credit note also has its original PDF, one click from the
+document page and from the outstanding list. The supplier only hands it to a
+logged-in session, so it comes through `/api/documents/<number>` with ours.
+Orders have no PDF until they are invoiced.
+
 ### Outstanding
 
 `/financials/outstanding` is the supplier's own list of what is still unpaid
