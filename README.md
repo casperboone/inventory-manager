@@ -138,6 +138,12 @@ import logs in like a browser (`src/lib/supplier/auth-service.ts`) and pages
 through the catalog's DataTables endpoint (`src/lib/supplier/catalog-service.ts`),
 1000 rows per request.
 
+[`docs/dinonline-portal.md`](docs/dinonline-portal.md) is the reference for
+that portal: how the session works, every endpoint we know of with its
+fields, the quirks (a JSON endpoint answers 500 unless its own page was
+loaded first) and what we deliberately leave alone. Read it before building
+anything that talks to the supplier.
+
 Each import records which products are new, which prices changed and which
 products disappeared from the catalog. Products are never deleted, only marked
 removed. Partial imports (a row limit or an unreadable row) never mark anything
