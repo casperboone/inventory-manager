@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 
 const SECTIONS = [
   { href: "/pricing", label: "Prices" },
+  { href: "/pricing/calculator", label: "Calculator" },
   { href: "/pricing/categories", label: "Categories & settings" },
 ];
 

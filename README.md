@@ -86,6 +86,12 @@ The table is grouped by order category, like the order page, with each row's
 pricing category as a label. It also shows the portions bought this year
 and last year, from the invoices.
 
+*Calculator* tries a price for something that isn't in the assortment yet:
+pick a pricing category, enter a purchase price and the contents (or paste a
+supplier description to read them from), and it shows the cost per portion,
+the advice with how it splits over the two margins, and what your own price
+would earn. Nothing there is saved.
+
 Pricing categories (margins, pivot price, loss, default VAT) and the settings
 live under *Categories & settings*. Each item has a pricing category, a VAT
 override, contents, alcohol percentage and a "not for sale" flag; the dialog

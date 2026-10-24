@@ -26,6 +26,7 @@ import type {
   PricingRow,
 } from "@/lib/pricing/queries";
 import { cn } from "@/lib/utils";
+import { priceTone } from "@/lib/pricing/calc";
 import { setSalePrice } from "./actions";
 import {
   PricingItemDialog,
@@ -492,17 +493,6 @@ function Signals({
 const display = (value: number | null) =>
   value == null ? "" : value.toFixed(2).replace(".", ",");
 
-// As in the old sheet: green when the price is clearly above the unrounded
-// advice, red when it is clearly below, and no colour within the margin.
-const PRICE_TONE_MARGIN = 0.125;
-
-function priceTone(row: PricingRow) {
-  if (row.salePrice == null || row.advice == null) return null;
-  if (row.salePrice > row.advice + PRICE_TONE_MARGIN) return "above";
-  if (row.salePrice < row.advice - PRICE_TONE_MARGIN) return "below";
-  return null;
-}
-
 function PriceInput({ row }: { row: PricingRow }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -534,7 +524,7 @@ function PriceInput({ row }: { row: PricingRow }) {
     else save(price);
   }
 
-  const tone = priceTone(row);
+  const tone = priceTone(row.salePrice, row.advice);
 
   const canUseAdvice =
     row.adviceRounded != null &&

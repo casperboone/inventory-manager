@@ -71,3 +71,14 @@ export function alcoholPrice(
   if (!alcoholPercentage || !portionVolume) return null;
   return salePrice / ((alcoholPercentage * portionVolume) / 0.01);
 }
+
+// As in the old sheet: green when the price is clearly above the unrounded
+// advice, red when it is clearly below, and no colour within the margin.
+const PRICE_TONE_MARGIN = 0.125;
+
+export function priceTone(salePrice: number | null, advice: number | null) {
+  if (salePrice == null || advice == null) return null;
+  if (salePrice > advice + PRICE_TONE_MARGIN) return "above" as const;
+  if (salePrice < advice - PRICE_TONE_MARGIN) return "below" as const;
+  return null;
+}
