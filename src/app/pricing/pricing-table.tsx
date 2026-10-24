@@ -41,11 +41,11 @@ const MISSING_LABELS: Record<MissingField, string> = {
 };
 
 function needsAttention(row: PricingRow) {
-  const { missing, adviceDiffers, lowMargin, costChanged, cheapAlcohol } =
+  const { missing, belowAdvice, lowMargin, costChanged, cheapAlcohol } =
     row.signals;
   return (
     missing.length > 0 ||
-    adviceDiffers ||
+    belowAdvice ||
     lowMargin ||
     costChanged ||
     cheapAlcohol
@@ -405,14 +405,13 @@ function Signals({
     });
   }
   if (
-    signals.adviceDiffers &&
+    signals.belowAdvice &&
     row.salePrice != null &&
     row.adviceRounded != null
   ) {
-    const diff = row.salePrice - row.adviceRounded;
     chips.push({
       key: "advice",
-      label: `${diff > 0 ? "+" : "−"}${formatPrice(Math.abs(diff))} vs advice`,
+      label: `−${formatPrice(row.adviceRounded - row.salePrice)} vs advice`,
       detail: `Advice is ${formatPrice(row.adviceRounded)}.`,
       tone: "warn",
     });

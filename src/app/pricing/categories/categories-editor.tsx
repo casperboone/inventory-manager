@@ -338,7 +338,7 @@ function SettingsForm({
         </div>
         <div className="space-y-1">
           <Label htmlFor="settings-tolerance" className="text-xs">
-            Flag prices off the advice by more than (%)
+            Flag prices below the advice by more than (%)
           </Label>
           <Input
             id="settings-tolerance"

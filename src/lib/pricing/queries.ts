@@ -86,7 +86,7 @@ export type PricingRow = {
   };
   signals: {
     missing: MissingField[];
-    adviceDiffers: boolean;
+    belowAdvice: boolean;
     lowMargin: boolean;
     costChanged: boolean;
     cheapAlcohol: boolean;
@@ -221,10 +221,11 @@ export async function getPricingOverview(): Promise<PricingOverview> {
       bought: { thisYear: boughtIn(thisYear), lastYear: boughtIn(lastYear) },
       signals: {
         missing,
-        adviceDiffers:
+        // Charging more than the advice is fine; only less gets flagged.
+        belowAdvice:
           sale != null &&
           adviceRounded != null &&
-          Math.abs(sale - adviceRounded) >
+          adviceRounded - sale >
             adviceRounded * settings.adviceTolerance + 0.001,
         // The blended margin never drops below the premium margin, so
         // anything under it is priced below what the model allows.

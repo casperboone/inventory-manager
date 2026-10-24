@@ -89,7 +89,7 @@ supplier item*: they get a manual purchase price and also show on the order
 page, where the review lists them to order by hand.
 
 Rows are flagged when data is missing, the price is more than the tolerance
-(10%) off the advice, the margin is below the premium margin, the cost per
+(10%) below the advice, the margin is below the premium margin, the cost per
 portion moved since the price was last saved (save it again to accept), or
 10 ml of alcohol is cheaper than in the reference drink (Queer Beer).
 
