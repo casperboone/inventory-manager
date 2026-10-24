@@ -1,9 +1,17 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Loader2Icon, PlusIcon, Trash2Icon } from "lucide-react";
+import { Loader2Icon, PencilIcon, PlusIcon, Trash2Icon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -14,7 +22,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { PricingCategory, PricingSettings } from "@/db/schema";
-import { formatPrice } from "@/lib/format";
+import { formatPercent, formatPrice } from "@/lib/format";
+import { advicePrice, roundPrice } from "@/lib/pricing/calc";
 import {
   deletePricingCategory,
   savePricingCategory,
@@ -23,7 +32,12 @@ import {
 
 type CategoryWithUsage = PricingCategory & { itemCount: number };
 
+type DialogState = { mode: "create" } | { mode: "edit"; id: number };
+
 const NONE = "none";
+
+// What a few typical portion costs come to, to see what the numbers do.
+const SAMPLE_COSTS = [0.25, 0.5, 1, 2];
 
 const parse = (text: string) => {
   const value = Number(text.trim().replace(",", "."));
@@ -31,6 +45,9 @@ const parse = (text: string) => {
 };
 // Margins and rates are stored as fractions but typed as percentages.
 const percent = (value: number) => String(Number((value * 100).toFixed(2)));
+// Pivot prices like 1.875 need their third decimal.
+const formatPivot = (value: number) =>
+  `€ ${Number(value.toFixed(3)).toLocaleString("nl-NL", { minimumFractionDigits: 2 })}`;
 
 export function CategoriesEditor({
   categories,
@@ -41,51 +58,185 @@ export function CategoriesEditor({
   settings: PricingSettings;
   referenceCandidates: { id: number; name: string }[];
 }) {
-  const [adding, setAdding] = useState(false);
+  const [dialog, setDialog] = useState<DialogState | null>(null);
+  const editing =
+    dialog?.mode === "edit"
+      ? categories.find((category) => category.id === dialog.id)
+      : undefined;
 
   return (
-    <div className="space-y-6 pb-12">
+    <div className="space-y-4 pb-12">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">
           Categories &amp; settings
         </h1>
         <p className="max-w-2xl text-sm text-muted-foreground">
-          The cost of a portion is marked up with the base margin until the
-          price reaches the pivot price. The part of the cost above that only
-          gets the premium margin, so expensive drinks stay affordable while
-          still earning more per glass. Loss is the share of a unit that never
-          gets sold, like tap loss.
+          How each kind of drink is priced, and the rules that apply to all of
+          them.
         </p>
       </div>
 
-      <div className="space-y-3">
-        {categories.map((category) => (
-          <CategoryForm key={category.id} category={category} />
-        ))}
-        {adding ? (
-          <CategoryForm onDone={() => setAdding(false)} />
-        ) : (
-          <Button variant="outline" onClick={() => setAdding(true)}>
-            <PlusIcon />
-            New pricing category
-          </Button>
-        )}
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <section className="overflow-hidden rounded-lg border bg-background">
+          <header className="flex items-center justify-between gap-3 border-b bg-muted/50 px-3 py-2">
+            <h2 className="text-sm font-semibold">Pricing categories</h2>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setDialog({ mode: "create" })}
+            >
+              <PlusIcon />
+              New category
+            </Button>
+          </header>
+          <table className="w-full table-fixed text-sm">
+            <thead className="text-xs text-muted-foreground">
+              <tr className="border-b">
+                <th className="px-3 py-1.5 text-left font-medium">Category</th>
+                <th className="hidden w-20 px-2 py-1.5 text-right font-medium sm:table-cell">
+                  Base
+                </th>
+                <th className="hidden w-20 px-2 py-1.5 text-right font-medium sm:table-cell">
+                  Pivot
+                </th>
+                <th className="hidden w-20 px-2 py-1.5 text-right font-medium sm:table-cell">
+                  Premium
+                </th>
+                <th className="hidden w-16 px-2 py-1.5 text-right font-medium md:table-cell">
+                  Loss
+                </th>
+                <th className="hidden w-14 px-2 py-1.5 text-right font-medium md:table-cell">
+                  VAT
+                </th>
+                <th className="w-14 px-2 py-1.5 text-right font-medium">
+                  Items
+                </th>
+                <th className="w-10" />
+              </tr>
+            </thead>
+            <tbody className="divide-y">
+              {categories.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-3 py-8 text-center text-muted-foreground"
+                  >
+                    No pricing categories yet.
+                  </td>
+                </tr>
+              )}
+              {categories.map((category) => (
+                <tr key={category.id} className="align-top">
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setDialog({ mode: "edit", id: category.id })
+                      }
+                      className="text-left font-medium underline-offset-2 hover:underline"
+                    >
+                      {category.name}
+                    </button>
+                    {/* The numbers don't fit on a phone; a summary does. */}
+                    <p className="text-xs text-muted-foreground tabular-nums sm:hidden">
+                      {formatPercent(category.baseMargin, 1)} to{" "}
+                      {formatPivot(category.pivotPrice)}, then{" "}
+                      {formatPercent(category.premiumMargin, 1)} ·{" "}
+                      {formatPercent(category.wastage)} loss · VAT{" "}
+                      {formatPercent(category.vatRate)}
+                    </p>
+                    {category.notes && (
+                      <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
+                        {category.notes}
+                      </p>
+                    )}
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                    {formatPercent(category.baseMargin, 1)}
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                    {formatPivot(category.pivotPrice)}
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums sm:table-cell">
+                    {formatPercent(category.premiumMargin, 1)}
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums md:table-cell">
+                    {formatPercent(category.wastage)}
+                  </td>
+                  <td className="hidden px-2 py-2 text-right tabular-nums md:table-cell">
+                    {formatPercent(category.vatRate)}
+                  </td>
+                  <td className="px-2 py-2 text-right text-muted-foreground tabular-nums">
+                    {category.itemCount}
+                  </td>
+                  <td className="py-1.5 pr-2 text-right">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Edit ${category.name}`}
+                      onClick={() =>
+                        setDialog({ mode: "edit", id: category.id })
+                      }
+                    >
+                      <PencilIcon />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <div className="space-y-4 lg:sticky lg:top-4">
+          <SettingsForm
+            settings={settings}
+            referenceCandidates={referenceCandidates}
+          />
+          <section className="space-y-2 rounded-lg border bg-background p-3 text-xs text-muted-foreground">
+            <h2 className="text-sm font-semibold text-foreground">
+              How advice works
+            </h2>
+            <p>
+              A portion&apos;s cost is marked up with the <b>base margin</b>{" "}
+              until the price reaches the <b>pivot price</b>. The part of the
+              cost above that only gets the <b>premium margin</b>, so expensive
+              drinks stay affordable while still earning more per glass.
+            </p>
+            <p>
+              <b>Loss</b> is the share of a unit that never gets sold, like tap
+              loss. <b>VAT</b> is the default; items can override it.
+            </p>
+          </section>
+        </div>
       </div>
 
-      <SettingsForm
-        settings={settings}
-        referenceCandidates={referenceCandidates}
-      />
+      <Dialog
+        open={dialog !== null}
+        onOpenChange={(open) => !open && setDialog(null)}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          {dialog && (dialog.mode === "create" || editing) && (
+            <CategoryForm
+              key={editing?.id ?? "new"}
+              category={editing}
+              rounding={settings.priceRounding}
+              onDone={() => setDialog(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function CategoryForm({
   category,
+  rounding,
   onDone,
 }: {
   category?: CategoryWithUsage;
-  onDone?: () => void;
+  rounding: number;
+  onDone: () => void;
 }) {
   const [name, setName] = useState(category?.name ?? "");
   const [baseMargin, setBaseMargin] = useState(
@@ -113,35 +264,34 @@ function CategoryForm({
     wastage: parse(wastage),
     vatRate: parse(vatRate),
   };
-  const dirty =
-    !category ||
-    name.trim() !== category.name ||
-    (notes.trim() || null) !== category.notes ||
-    values.pivotPrice !== category.pivotPrice ||
-    (["baseMargin", "premiumMargin", "wastage", "vatRate"] as const).some(
-      (key) => values[key] !== Number(percent(category[key])),
-    );
+  const complete = Object.values(values).every((value) => value != null);
+  const preview =
+    complete && values.baseMargin! < 100 && values.premiumMargin! < 100
+      ? {
+          baseMargin: values.baseMargin! / 100,
+          pivotPrice: values.pivotPrice!,
+          premiumMargin: values.premiumMargin! / 100,
+          wastage: values.wastage! / 100,
+          vatRate: values.vatRate! / 100,
+        }
+      : null;
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    if (Object.values(values).some((value) => value == null)) {
-      toast.error("Fill in every number.");
+    if (!preview) {
+      toast.error("Fill in every number; margins stay below 100%.");
       return;
     }
     startTransition(async () => {
       const result = await savePricingCategory({
         id: category?.id,
         name,
-        baseMargin: values.baseMargin! / 100,
-        pivotPrice: values.pivotPrice!,
-        premiumMargin: values.premiumMargin! / 100,
-        wastage: values.wastage! / 100,
-        vatRate: values.vatRate! / 100,
+        ...preview,
         notes: notes.trim() || null,
       });
       if (result.ok) {
         toast.success(category ? "Category saved" : "Category added");
-        onDone?.();
+        onDone();
       } else {
         toast.error(result.error);
       }
@@ -153,8 +303,12 @@ function CategoryForm({
     if (!confirm(`Delete the pricing category “${category.name}”?`)) return;
     startTransition(async () => {
       const result = await deletePricingCategory(category.id);
-      if (result.ok) toast.success("Category deleted");
-      else toast.error(result.error);
+      if (result.ok) {
+        toast.success("Category deleted");
+        onDone();
+      } else {
+        toast.error(result.error);
+      }
     });
   }
 
@@ -164,6 +318,7 @@ function CategoryForm({
     value: string,
     onChange: (value: string) => void,
     suffix: string,
+    hint: string,
   ) => (
     <div className="space-y-1">
       <Label htmlFor={id} className="text-xs">
@@ -182,23 +337,30 @@ function CategoryForm({
           {suffix}
         </span>
       </div>
+      <p className="text-xs text-muted-foreground">{hint}</p>
     </div>
   );
 
-  const prefix = `category-${category?.id ?? "new"}`;
-
   return (
-    <form
-      onSubmit={onSubmit}
-      className="space-y-3 rounded-lg border bg-background p-3"
-    >
-      <div className="flex flex-wrap items-end gap-3">
-        <div className="min-w-40 flex-1 space-y-1">
-          <Label htmlFor={`${prefix}-name`} className="text-xs">
+    <>
+      <DialogHeader>
+        <DialogTitle>
+          {category ? category.name : "New pricing category"}
+        </DialogTitle>
+        <DialogDescription>
+          {category
+            ? `Used by ${category.itemCount} item${category.itemCount === 1 ? "" : "s"}. Changes apply to their advice right away.`
+            : "Pick it for items on the prices page afterwards."}
+        </DialogDescription>
+      </DialogHeader>
+
+      <form onSubmit={onSubmit} className="space-y-4">
+        <div className="space-y-1">
+          <Label htmlFor="category-name" className="text-xs">
             Name
           </Label>
           <Input
-            id={`${prefix}-name`}
+            id="category-name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Fris"
@@ -206,69 +368,105 @@ function CategoryForm({
             required
           />
         </div>
-        <p className="pb-2 text-xs text-muted-foreground">
-          {category
-            ? `${category.itemCount} item${category.itemCount === 1 ? "" : "s"}`
-            : "New"}
-        </p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {field(`${prefix}-base`, "Base margin", baseMargin, setBaseMargin, "%")}
-        {field(
-          `${prefix}-pivot`,
-          "Pivot price",
-          pivotPrice,
-          setPivotPrice,
-          "€",
-        )}
-        {field(
-          `${prefix}-premium`,
-          "Premium margin",
-          premiumMargin,
-          setPremiumMargin,
-          "%",
-        )}
-        {field(`${prefix}-loss`, "Loss", wastage, setWastage, "%")}
-        {field(`${prefix}-vat`, "VAT", vatRate, setVatRate, "%")}
-      </div>
-      <div className="space-y-1">
-        <Label htmlFor={`${prefix}-notes`} className="text-xs">
-          Why
-        </Label>
-        <Input
-          id={`${prefix}-notes`}
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Pivot is where the old price should have been"
-        />
-      </div>
-      <div className="flex justify-end gap-2">
-        {category ? (
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={onDelete}
-            disabled={pending || category.itemCount > 0}
-            title={
-              category.itemCount > 0
-                ? "Move its items to another category first"
-                : "Delete category"
-            }
-            aria-label="Delete category"
-          >
-            <Trash2Icon />
+
+        <div className="grid grid-cols-3 gap-3">
+          {field(
+            "category-base",
+            "Base margin",
+            baseMargin,
+            setBaseMargin,
+            "%",
+            "Up to the pivot",
+          )}
+          {field(
+            "category-pivot",
+            "Pivot price",
+            pivotPrice,
+            setPivotPrice,
+            "€",
+            "Incl. VAT",
+          )}
+          {field(
+            "category-premium",
+            "Premium margin",
+            premiumMargin,
+            setPremiumMargin,
+            "%",
+            "Above the pivot",
+          )}
+          {field(
+            "category-loss",
+            "Loss",
+            wastage,
+            setWastage,
+            "%",
+            "Never sold",
+          )}
+          {field("category-vat", "VAT", vatRate, setVatRate, "%", "Default")}
+        </div>
+
+        <div className="space-y-1">
+          <Label htmlFor="category-notes" className="text-xs">
+            Why
+          </Label>
+          <textarea
+            id="category-notes"
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            rows={3}
+            placeholder="Pivot is where the old price should have been"
+            className="w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 py-1.5 text-base outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:text-sm dark:bg-input/30"
+          />
+        </div>
+
+        <div className="rounded-lg bg-muted/50 p-3">
+          <p className="mb-2 text-xs text-muted-foreground">
+            Advice for a portion costing
+          </p>
+          <div className="grid grid-cols-4 gap-2 text-sm tabular-nums">
+            {SAMPLE_COSTS.map((cost) => (
+              <div key={cost}>
+                <p className="text-xs text-muted-foreground">
+                  {formatPrice(cost)}
+                </p>
+                <p className="font-medium">
+                  {preview
+                    ? formatPrice(
+                        roundPrice(advicePrice(cost, preview), rounding),
+                      )
+                    : "—"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          <div>
+            {category && (
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={onDelete}
+                disabled={pending || category.itemCount > 0}
+                title={
+                  category.itemCount > 0
+                    ? "Move its items to another category first"
+                    : "Delete category"
+                }
+              >
+                <Trash2Icon />
+                Delete
+              </Button>
+            )}
+          </div>
+          <Button type="submit" disabled={pending}>
+            {pending && <Loader2Icon className="animate-spin" />}
+            {category ? "Save" : "Add category"}
           </Button>
-        ) : (
-          <Button type="button" variant="ghost" onClick={onDone}>
-            Cancel
-          </Button>
-        )}
-        <Button type="submit" disabled={pending || !dirty}>
-          {pending && <Loader2Icon className="animate-spin" />}
-          {category ? "Save" : "Add category"}
-        </Button>
-      </div>
-    </form>
+        </DialogFooter>
+      </form>
+    </>
   );
 }
 
@@ -318,34 +516,45 @@ function SettingsForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="space-y-3 rounded-lg border bg-background p-3"
+      className="overflow-hidden rounded-lg border bg-background"
     >
-      <h2 className="text-sm font-semibold">Settings</h2>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <header className="border-b bg-muted/50 px-3 py-2">
+        <h2 className="text-sm font-semibold">Settings</h2>
+      </header>
+      <div className="space-y-4 p-3">
         <div className="space-y-1">
           <Label htmlFor="settings-rounding" className="text-xs">
             Round advice to
           </Label>
-          <Input
-            id="settings-rounding"
-            value={rounding}
-            onChange={(e) => setRounding(e.target.value)}
-            inputMode="decimal"
-          />
-          <p className="text-xs text-muted-foreground">
-            e.g. 0.1 rounds to {formatPrice(0.1)}.
-          </p>
+          <div className="relative">
+            <Input
+              id="settings-rounding"
+              value={rounding}
+              onChange={(e) => setRounding(e.target.value)}
+              inputMode="decimal"
+              className="pr-6 tabular-nums"
+            />
+            <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground">
+              €
+            </span>
+          </div>
         </div>
         <div className="space-y-1">
           <Label htmlFor="settings-tolerance" className="text-xs">
-            Flag prices below the advice by more than (%)
+            Flag prices below the advice by more than
           </Label>
-          <Input
-            id="settings-tolerance"
-            value={tolerance}
-            onChange={(e) => setTolerance(e.target.value)}
-            inputMode="decimal"
-          />
+          <div className="relative">
+            <Input
+              id="settings-tolerance"
+              value={tolerance}
+              onChange={(e) => setTolerance(e.target.value)}
+              inputMode="decimal"
+              className="pr-6 tabular-nums"
+            />
+            <span className="pointer-events-none absolute top-1/2 right-2 -translate-y-1/2 text-xs text-muted-foreground">
+              %
+            </span>
+          </div>
         </div>
         <div className="space-y-1">
           <Label className="text-xs">Alcohol reference</Label>
@@ -366,12 +575,10 @@ function SettingsForm({
             </SelectContent>
           </Select>
           <p className="text-xs text-muted-foreground">
-            Drinks with cheaper alcohol than this get flagged.
+            Drinks whose alcohol is cheaper than in this one get flagged.
           </p>
         </div>
-      </div>
-      <div className="flex justify-end">
-        <Button type="submit" disabled={pending}>
+        <Button type="submit" disabled={pending} className="w-full">
           {pending && <Loader2Icon className="animate-spin" />}
           Save settings
         </Button>
