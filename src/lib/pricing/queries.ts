@@ -19,6 +19,7 @@ import {
   portionsPerUnit,
   roundPrice,
 } from "./calc";
+import { getQuantitiesByYear } from "@/lib/products/purchases";
 
 export const DEFAULT_SETTINGS: PricingSettings = {
   id: 1,
@@ -78,6 +79,11 @@ export type PricingRow = {
   margin: number | null;
   profit: number | null;
   alcoholPrice: number | null;
+  // Bought according to the invoices, in purchase units and in portions.
+  bought: {
+    thisYear: { units: number; portions: number | null } | null;
+    lastYear: { units: number; portions: number | null } | null;
+  };
   signals: {
     missing: MissingField[];
     adviceDiffers: boolean;
@@ -89,6 +95,8 @@ export type PricingRow = {
 
 export type PricingOverview = {
   rows: PricingRow[];
+  // The years the "bought" columns cover; this one only up to today.
+  years: { thisYear: string; lastYear: string };
   categories: PricingCategory[];
   settings: PricingSettings;
   reference: { id: number; name: string; alcoholPrice: number | null } | null;
@@ -149,6 +157,11 @@ export async function getPricingOverview(): Promise<PricingOverview> {
     getPricingSettings(),
   ]);
 
+  // Calendar years as the invoice dates are stored, like purchase history.
+  const thisYear = String(new Date().getUTCFullYear());
+  const lastYear = String(Number(thisYear) - 1);
+  const quantities = await getQuantitiesByYear([thisYear, lastYear]);
+
   const byId = new Map(categories.map((category) => [category.id, category]));
 
   const rows: PricingRow[] = items.map(({ removedAt, ownImageId, ...item }) => {
@@ -178,6 +191,15 @@ export async function getPricingOverview(): Promise<PricingOverview> {
     if (!portions) missing.push("portions");
     if (sale == null) missing.push("salePrice");
 
+    const boughtIn = (year: string) => {
+      // Linked but never invoiced is a real zero; unlinked is unknown.
+      const units = item.itemNo
+        ? (quantities.get(item.itemNo)?.get(year) ?? 0)
+        : undefined;
+      if (units == null) return null;
+      return { units, portions: portions ? units * portions : null };
+    };
+
     const rowMargin = sale && cost != null ? margin(sale, cost) : null;
 
     return {
@@ -196,6 +218,7 @@ export async function getPricingOverview(): Promise<PricingOverview> {
         sale != null
           ? alcoholPrice(sale, item.alcoholPercentage, item.portionVolume)
           : null,
+      bought: { thisYear: boughtIn(thisYear), lastYear: boughtIn(lastYear) },
       signals: {
         missing,
         adviceDiffers:
@@ -235,7 +258,13 @@ export async function getPricingOverview(): Promise<PricingOverview> {
     }
   }
 
-  return { rows, categories, settings, reference };
+  return {
+    rows,
+    years: { thisYear, lastYear },
+    categories,
+    settings,
+    reference,
+  };
 }
 
 export async function getSalePriceHistory(itemId: number) {

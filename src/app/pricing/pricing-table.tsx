@@ -59,7 +59,7 @@ export function PricingTable({
   overview: PricingOverview;
   orderCategories: AssortmentCategory[];
 }) {
-  const { rows, categories, reference } = overview;
+  const { rows, categories, reference, years } = overview;
   const [view, setView] = useState<View>("all");
   const [search, setSearch] = useState("");
   const [dialog, setDialog] = useState<PricingDialogState | null>(null);
@@ -199,6 +199,18 @@ export function PricingTable({
                     >
                       /10 ml alc.
                     </th>
+                    <th
+                      className="hidden px-2 py-1.5 text-right font-medium md:table-cell"
+                      title={`Portions bought in ${years.thisYear} so far, from the invoices`}
+                    >
+                      {years.thisYear} YTD
+                    </th>
+                    <th
+                      className="hidden px-3 py-1.5 text-right font-medium md:table-cell"
+                      title={`Portions bought in ${years.lastYear}, from the invoices`}
+                    >
+                      {years.lastYear}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y">
@@ -320,7 +332,42 @@ function PricingTableRow({
       >
         {row.alcoholPrice != null ? formatPrice(row.alcoholPrice) : ""}
       </td>
+      <td className="hidden px-2 py-2 text-right tabular-nums md:table-cell">
+        <Bought value={row.bought.thisYear} unit={row.unitOfMeasure} />
+      </td>
+      <td className="hidden px-3 py-2 text-right tabular-nums md:table-cell">
+        <Bought value={row.bought.lastYear} unit={row.unitOfMeasure} />
+      </td>
     </tr>
+  );
+}
+
+const portionFormat = new Intl.NumberFormat("nl-NL", {
+  maximumFractionDigits: 0,
+});
+const unitFormat = new Intl.NumberFormat("nl-NL", {
+  maximumFractionDigits: 1,
+});
+
+// Portions bought, with the purchase units underneath; just the units when
+// the item doesn't know its portions yet.
+function Bought({
+  value,
+  unit,
+}: {
+  value: PricingRow["bought"]["thisYear"];
+  unit: string | null;
+}) {
+  if (!value) return <span className="text-muted-foreground">—</span>;
+  const units = `${unitFormat.format(value.units)} ${unit?.toLowerCase() ?? "units"}`;
+  if (value.portions == null) {
+    return <span className="text-muted-foreground">{units}</span>;
+  }
+  return (
+    <>
+      {portionFormat.format(value.portions)}
+      <p className="text-xs text-muted-foreground">{units}</p>
+    </>
   );
 }
 
