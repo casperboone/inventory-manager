@@ -23,7 +23,7 @@ export function InvoiceImportButton({ remaining }: { remaining?: number }) {
       toast.success(
         `${result.imported} invoices read${result.remaining > 0 ? `, ${result.remaining} to go` : ""}`,
         {
-          description: `${result.creditMemos} credit notes · ${result.lines} lines · ${result.openOrders} open orders refreshed`,
+          description: `${result.creditMemos} credit notes · ${result.lines} lines · ${result.openOrders} open orders · ${result.openEntries} outstanding`,
         }
       );
       router.refresh();

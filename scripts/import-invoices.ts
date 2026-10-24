@@ -16,7 +16,7 @@ async function main() {
   );
   const result = await importSupplierInvoices({ batch: arg("batch") });
   console.log(
-    `Imported ${result.imported} invoices (${result.lines} lines), refreshed ${result.openOrders} open orders. ${result.remaining} of ${result.total} still to go.`
+    `Imported ${result.imported} invoices (${result.lines} lines), refreshed ${result.openOrders} open orders and ${result.openEntries} outstanding documents. ${result.remaining} of ${result.total} still to go.`
   );
 }
 

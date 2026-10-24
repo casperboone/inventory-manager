@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, FileTextIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatNumber, formatPrice } from "@/lib/format";
+import { formatDate, formatNumber } from "@/lib/format";
 import { getDocument } from "@/lib/products/documents";
 import { DocumentLines, DocumentTypeBadge } from "../../document-lines";
+import { DocumentMeta, DocumentTotals } from "../../document-meta";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default async function InvoicePage(
   const document = await getDocument(decodeURIComponent(documentNo));
   if (!document || document.header.documentType === "order") notFound();
 
-  const { header, lines, totals } = document;
+  const { header, lines, totals, orderLinked } = document;
 
   return (
     <div className="space-y-4">
@@ -45,23 +46,30 @@ export default async function InvoicePage(
         <span className="text-sm text-muted-foreground">
           {formatDate(header.documentDate)} · {formatNumber(lines.length)} lines
         </span>
+        {/* The supplier's own PDF, fetched with our session. */}
+        <Button
+          variant="outline"
+          size="sm"
+          className="sm:ml-auto"
+          nativeButton={false}
+          render={
+            <a
+              href={`/api/documents/${encodeURIComponent(header.documentNo)}`}
+              target="_blank"
+              rel="noreferrer"
+            />
+          }
+        >
+          <FileTextIcon />
+          PDF
+        </Button>
       </div>
+
+      <DocumentMeta header={header} orderLinked={orderLinked} />
 
       <DocumentLines lines={lines} />
 
-      <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 text-sm">
-        {totals.discount > 0.005 && (
-          <span className="text-muted-foreground">
-            Line discount saved {formatPrice(totals.discount)}
-          </span>
-        )}
-        <span>
-          Total excl. VAT{" "}
-          <strong className="tabular-nums">
-            {formatPrice(header.amount ?? totals.lines)}
-          </strong>
-        </span>
-      </div>
+      <DocumentTotals header={header} totals={totals} label="Total excl. VAT" />
     </div>
   );
 }
