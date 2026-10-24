@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import {
   AlertTriangleIcon,
+  BanknoteIcon,
   ArrowLeftIcon,
   CheckIcon,
   PlusIcon,
@@ -288,9 +289,10 @@ function PricingTableRow({
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground" />
+                      <span className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground" />
                     }
                   >
+                    <BanknoteIcon className="size-3" />
                     {pricingCategory.name}
                   </TooltipTrigger>
                   <TooltipContent>
