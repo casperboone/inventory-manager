@@ -63,6 +63,42 @@ Every row in the catalog (`/products`, and the import detail pages) also has a
 cart button for a one-off order: pick an amount and it goes straight into the
 supplier cart, without touching the assortment.
 
+## Pricing
+
+`/pricing` sets what we charge, on the same assortment items as the order
+page but on its own screen. The model comes from the bar's old
+"Prijsberekening" sheet (`src/lib/pricing/calc.ts`):
+
+- **Cost per portion** = purchase price × (1 + VAT) ÷ (portions × (1 − loss)).
+  The purchase price is Rust's catalog price (already net of the line
+  discount) unless the item has a manual one; portions follow from the liters
+  in a unit and in a portion, or are filled in directly for what isn't poured.
+- **Advice**: the cost is marked up with the category's *base margin* while the
+  price stays under its *pivot price*; the part of the cost above that only
+  gets the lower *premium margin*, like tax brackets. Rounded to the setting
+  (€ 0,10).
+- **Price** is chosen by hand, inline in the table, with a button to take the
+  advice. Every change is kept in `sale_price_changes`.
+
+Pricing categories (margins, pivot price, loss, default VAT) and the settings
+live under *Categories & settings*. Each item has a pricing category, a VAT
+override, contents, alcohol percentage and a "not for sale" flag; the dialog
+can read the contents from the supplier's description ("24/20CL", "FUST
+20LT"). Items bought elsewhere (the rotating whisky) are added with *Other
+supplier item*: they get a manual purchase price and also show on the order
+page, where the review lists them to order by hand.
+
+Rows are flagged when data is missing, the price is more than the tolerance
+(10%) off the advice, the margin is below the premium margin, the cost per
+portion moved since the price was last saved (save it again to accept), or
+10 ml of alcohol is cheaper than in the reference drink (Queer Beer).
+
+The sheet was imported once with
+`npm run pricing:import -- Prijsberekening.xlsx` (dry run; add `--apply` to
+write). It matches rows to items by article number within the same heading,
+then by name, skips ARCHIEF, prefers the alcohol percentage from the
+supplier's description, and refuses to run once pricing categories exist.
+
 ## Line discounts (regelkorting)
 
 The supplier shows the line discount nowhere before ordering: the catalog JSON
