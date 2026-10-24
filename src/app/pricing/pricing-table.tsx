@@ -17,7 +17,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AssortmentCategory } from "@/db/schema";
+import type { AssortmentCategory, PricingCategory } from "@/db/schema";
 import { formatPercent, formatPrice } from "@/lib/format";
 import type {
   MissingField,
@@ -80,24 +80,28 @@ export function PricingTable({
         .some((text) => text!.toLowerCase().includes(query));
     });
 
-    const result = categories.map((category) => ({
-      id: category.id as number | null,
-      name: category.name,
-      category,
-      rows: visible.filter((row) => row.pricingCategoryId === category.id),
-    }));
-    result.push({
-      id: null,
-      name: view === "notForSale" ? "Not for sale" : "No pricing category",
-      category: undefined!,
-      rows: visible.filter(
-        (row) =>
-          row.pricingCategoryId == null ||
-          !categories.some((category) => category.id === row.pricingCategoryId),
-      ),
-    });
-    return result.filter((group) => group.rows.length > 0);
-  }, [rows, categories, view, search]);
+    // Grouped like the order page, which is how you find things; the
+    // pricing category is shown per row instead. Rows arrive in that order.
+    const result: { id: number; name: string; rows: PricingRow[] }[] = [];
+    for (const row of visible) {
+      let group = result.find((g) => g.id === row.orderCategoryId);
+      if (!group) {
+        group = {
+          id: row.orderCategoryId,
+          name: row.orderCategoryName,
+          rows: [],
+        };
+        result.push(group);
+      }
+      group.rows.push(row);
+    }
+    return result;
+  }, [rows, view, search]);
+
+  const categoryById = useMemo(
+    () => new Map(categories.map((category) => [category.id, category])),
+    [categories],
+  );
 
   const dialogItem =
     dialog?.mode === "edit"
@@ -157,56 +161,53 @@ export function PricingTable({
       <div className="space-y-4">
         {groups.map((group) => (
           <section
-            key={group.id ?? "none"}
+            key={group.id}
             className="overflow-hidden rounded-lg border bg-background"
           >
             <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 border-b bg-muted/50 px-3 py-2">
               <h2 className="text-sm font-semibold">{group.name}</h2>
-              {group.category && (
-                <p className="text-xs text-muted-foreground tabular-nums">
-                  {formatPercent(group.category.baseMargin, 1)} up to{" "}
-                  {formatPrice(group.category.pivotPrice)} · then{" "}
-                  {formatPercent(group.category.premiumMargin, 1)} ·{" "}
-                  {formatPercent(group.category.wastage)} loss · VAT{" "}
-                  {formatPercent(group.category.vatRate)}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground">
+                {group.rows.length} item{group.rows.length === 1 ? "" : "s"}
+              </p>
             </header>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              {/* Fixed widths, so the columns line up across categories. */}
+              <table className="w-full table-fixed text-sm">
                 <thead className="text-xs text-muted-foreground">
                   <tr className="border-b">
                     <th className="px-3 py-1.5 text-left font-medium">Item</th>
-                    <th className="hidden px-2 py-1.5 text-right font-medium md:table-cell">
+                    <th className="hidden w-20 px-2 py-1.5 text-right font-medium md:table-cell">
                       Purchase
                     </th>
-                    <th className="hidden px-2 py-1.5 text-right font-medium sm:table-cell">
+                    <th className="hidden w-16 px-2 py-1.5 text-right font-medium sm:table-cell">
                       Cost
                     </th>
-                    <th className="px-2 py-1.5 text-right font-medium">
+                    <th className="w-16 px-2 py-1.5 text-right font-medium">
                       Advice
                     </th>
-                    <th className="px-2 py-1.5 text-left font-medium">Price</th>
-                    <th className="hidden px-2 py-1.5 text-right font-medium sm:table-cell">
+                    <th className="w-32 px-2 py-1.5 text-left font-medium">
+                      Price
+                    </th>
+                    <th className="hidden w-16 px-2 py-1.5 text-right font-medium sm:table-cell">
                       Margin
                     </th>
-                    <th className="hidden px-2 py-1.5 text-right font-medium lg:table-cell">
+                    <th className="hidden w-16 px-2 py-1.5 text-right font-medium lg:table-cell">
                       Profit
                     </th>
                     <th
-                      className="hidden px-2 py-1.5 text-right font-medium lg:table-cell"
+                      className="hidden w-20 px-2 py-1.5 text-right font-medium lg:table-cell"
                       title="Price of 10 ml pure alcohol"
                     >
                       /10 ml alc.
                     </th>
                     <th
-                      className="hidden px-2 py-1.5 text-right font-medium md:table-cell"
+                      className="hidden w-20 px-2 py-1.5 text-right font-medium md:table-cell"
                       title={`Portions bought in ${years.thisYear} so far, from the invoices`}
                     >
                       {years.thisYear} YTD
                     </th>
                     <th
-                      className="hidden px-3 py-1.5 text-right font-medium md:table-cell"
+                      className="hidden w-20 px-3 py-1.5 text-right font-medium md:table-cell"
                       title={`Portions bought in ${years.lastYear}, from the invoices`}
                     >
                       {years.lastYear}
@@ -218,6 +219,11 @@ export function PricingTable({
                     <PricingTableRow
                       key={row.id}
                       row={row}
+                      pricingCategory={
+                        row.pricingCategoryId != null
+                          ? categoryById.get(row.pricingCategoryId)
+                          : undefined
+                      }
                       referenceName={reference?.name}
                       referenceAlcoholPrice={reference?.alcoholPrice ?? null}
                       onEdit={() => setDialog({ mode: "edit", itemId: row.id })}
@@ -244,11 +250,13 @@ export function PricingTable({
 
 function PricingTableRow({
   row,
+  pricingCategory,
   referenceName,
   referenceAlcoholPrice,
   onEdit,
 }: {
   row: PricingRow;
+  pricingCategory?: PricingCategory;
   referenceName?: string;
   referenceAlcoholPrice: number | null;
   onEdit: () => void;
@@ -268,17 +276,35 @@ function PricingTableRow({
             className="hidden sm:flex"
           />
           <div className="min-w-0">
-            <button
-              type="button"
-              onClick={onEdit}
-              className="text-left font-medium underline-offset-2 hover:underline"
-            >
-              {row.name}
-            </button>
-            <p className="hidden text-xs text-muted-foreground sm:block">
-              {row.purchaseSource ??
-                row.supplierDescription ??
-                row.orderCategoryName}
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+              <button
+                type="button"
+                onClick={onEdit}
+                className="text-left font-medium underline-offset-2 hover:underline"
+              >
+                {row.name}
+              </button>
+              {pricingCategory && (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground" />
+                    }
+                  >
+                    {pricingCategory.name}
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    {formatPercent(pricingCategory.baseMargin, 1)} up to{" "}
+                    {formatPrice(pricingCategory.pivotPrice)}, then{" "}
+                    {formatPercent(pricingCategory.premiumMargin, 1)} ·{" "}
+                    {formatPercent(pricingCategory.wastage)} loss · VAT{" "}
+                    {formatPercent(row.vatRate)}
+                  </TooltipContent>
+                </Tooltip>
+              )}
+            </div>
+            <p className="hidden truncate text-xs text-muted-foreground sm:block">
+              {row.purchaseSource ?? row.supplierDescription ?? "Not at Rust"}
               {row.portions != null &&
                 ` · ${Number(row.portions.toFixed(1))} portions`}
             </p>

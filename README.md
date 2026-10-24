@@ -78,7 +78,13 @@ page but on its own screen. The model comes from the bar's old
   gets the lower *premium margin*, like tax brackets. Rounded to the setting
   (€ 0,10).
 - **Price** is chosen by hand, inline in the table, with a button to take the
-  advice. Every change is kept in `sale_price_changes`.
+  advice. Every change is kept in `sale_price_changes`. Like the old sheet,
+  it turns green when it is more than € 0,125 above the unrounded advice and
+  red when it is that far below.
+
+The table is grouped by order category, like the order page, with each row's
+pricing category as a label. It also shows the portions bought this year
+and last year, from the invoices.
 
 Pricing categories (margins, pivot price, loss, default VAT) and the settings
 live under *Categories & settings*. Each item has a pricing category, a VAT
