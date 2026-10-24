@@ -465,6 +465,17 @@ function Signals({
 const display = (value: number | null) =>
   value == null ? "" : value.toFixed(2).replace(".", ",");
 
+// As in the old sheet: green when the price is clearly above the unrounded
+// advice, red when it is clearly below, and no colour within the margin.
+const PRICE_TONE_MARGIN = 0.125;
+
+function priceTone(row: PricingRow) {
+  if (row.salePrice == null || row.advice == null) return null;
+  if (row.salePrice > row.advice + PRICE_TONE_MARGIN) return "above";
+  if (row.salePrice < row.advice - PRICE_TONE_MARGIN) return "below";
+  return null;
+}
+
 function PriceInput({ row }: { row: PricingRow }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -496,6 +507,8 @@ function PriceInput({ row }: { row: PricingRow }) {
     else save(price);
   }
 
+  const tone = priceTone(row);
+
   const canUseAdvice =
     row.adviceRounded != null &&
     Math.abs(row.adviceRounded - (row.salePrice ?? -1)) >= 0.005;
@@ -517,7 +530,19 @@ function PriceInput({ row }: { row: PricingRow }) {
         placeholder="—"
         aria-label={`Price of ${row.name}`}
         disabled={pending}
-        className="h-7 w-16 px-1.5 text-right tabular-nums"
+        title={
+          tone === "above"
+            ? "Above the advice"
+            : tone === "below"
+              ? "Below the advice"
+              : undefined
+        }
+        className={cn(
+          "h-7 w-16 px-1.5 text-right tabular-nums",
+          tone === "above" &&
+            "border-green-600/30 bg-green-100 dark:bg-green-500/20",
+          tone === "below" && "border-red-600/30 bg-red-100 dark:bg-red-500/20",
+        )}
       />
       {canUseAdvice && (
         <Button
