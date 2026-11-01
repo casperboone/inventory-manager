@@ -191,10 +191,11 @@ export function ImagePicker({
             type="button"
             variant={query === suggestion ? "secondary" : "outline"}
             size="xs"
+            className="max-w-full"
             onClick={() => search(suggestion)}
             disabled={searching || saving}
           >
-            {suggestion}
+            <span className="truncate">{suggestion}</span>
           </Button>
         ))}
         {query.trim().startsWith("http") && (

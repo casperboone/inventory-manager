@@ -193,7 +193,9 @@ function ItemForm({
         {item && <OpenItemLink itemId={item.id} />}
       </DialogHeader>
 
-      <form onSubmit={onSubmit} className="space-y-4">
+      {/* min-w-0: as a grid item the form would otherwise widen the dialog to
+          fit a long supplier description, even though that text truncates. */}
+      <form onSubmit={onSubmit} className="min-w-0 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="item-name">Name</Label>
           <Input
