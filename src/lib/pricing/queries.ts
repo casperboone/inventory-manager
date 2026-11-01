@@ -32,6 +32,7 @@ function selectPricingItems() {
       orderCategoryName: assortmentCategories.name,
       pricingCategoryId: assortmentItems.pricingCategoryId,
       notForSale: assortmentItems.notForSale,
+      archivedAt: assortmentItems.archivedAt,
       itemNo: supplierProducts.itemNo,
       supplierDescription: supplierProducts.description,
       removedAt: supplierProducts.removedAt,
@@ -100,6 +101,7 @@ export type PricingRow = {
   orderCategoryName: string;
   pricingCategoryId: number | null;
   notForSale: boolean;
+  archivedAt: Date | null;
   itemNo: string | null;
   supplierDescription: string | null;
   supplierRemoved: boolean;

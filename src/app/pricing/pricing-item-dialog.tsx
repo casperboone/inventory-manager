@@ -29,6 +29,7 @@ import type {
 } from "@/db/schema";
 import { OpenItemLink } from "@/components/item-links";
 import { formatPercent, formatPrice } from "@/lib/format";
+import { parseTypedNumber } from "@/lib/numbers";
 import {
   advicePrice,
   portionCost,
@@ -47,11 +48,6 @@ const NONE = "none";
 const DEFAULT_VAT = "default";
 const VAT_RATES = [0, 0.09, 0.21];
 
-// Form values are typed text; these turn them back into numbers.
-const parse = (text: string) => {
-  const value = Number(text.trim().replace(",", "."));
-  return text.trim() === "" || !Number.isFinite(value) ? null : value;
-};
 const show = (value: number | null | undefined, factor = 1) =>
   value == null ? "" : String(Number((value * factor).toFixed(4)));
 
@@ -136,14 +132,14 @@ function PricingItemForm({
     suggestion.count != null ||
     suggestion.alcoholPercentage != null;
 
-  const portionVolumeLiters = parse(portionVolume);
-  const alcoholFraction = parse(alcohol);
+  const portionVolumeLiters = parseTypedNumber(portionVolume);
+  const alcoholFraction = parseTypedNumber(alcohol);
   const input = {
-    purchasePrice: parse(manualPrice) ?? item?.catalogPrice ?? null,
-    unitVolume: parse(unitVolume),
+    purchasePrice: parseTypedNumber(manualPrice) ?? item?.catalogPrice ?? null,
+    unitVolume: parseTypedNumber(unitVolume),
     portionVolume:
       portionVolumeLiters != null ? portionVolumeLiters / 100 : null,
-    portionsPerUnit: parse(portions),
+    portionsPerUnit: parseTypedNumber(portions),
     vatRate: vat === DEFAULT_VAT ? null : Number(vat),
     alcoholPercentage: alcoholFraction != null ? alcoholFraction / 100 : null,
   };
@@ -185,7 +181,7 @@ function PricingItemForm({
         portionsPerUnit: input.portionsPerUnit,
         alcoholPercentage: input.alcoholPercentage,
         vatRate: input.vatRate,
-        manualPurchasePrice: parse(manualPrice),
+        manualPurchasePrice: parseTypedNumber(manualPrice),
         purchaseSource: source.trim() || null,
       });
       if (result.ok) {

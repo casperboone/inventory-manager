@@ -13,6 +13,7 @@ import {
 import { toast } from "sonner";
 import { ItemImage } from "@/components/item-image";
 import { OpenItemLink } from "@/components/item-links";
+import { ViewTab } from "@/components/section-tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -22,6 +23,7 @@ import {
 } from "@/components/ui/tooltip";
 import type { AssortmentCategory, PricingCategory } from "@/db/schema";
 import { formatPercent, formatPrice } from "@/lib/format";
+import { parseTypedNumber } from "@/lib/numbers";
 import type { PricingOverview, PricingRow } from "@/lib/pricing/queries";
 import { priceToneStyle, signalChips } from "@/lib/pricing/signals";
 import { cn } from "@/lib/utils";
@@ -471,14 +473,13 @@ function PriceInput({ row }: { row: PricingRow }) {
 
   function commit() {
     if (draft == null) return;
-    const text = draft.trim().replace(",", ".");
-    if (text === "") {
+    if (draft.trim() === "") {
       if (row.salePrice == null) setDraft(null);
       else save(null);
       return;
     }
-    const price = Number(text);
-    if (!Number.isFinite(price) || price < 0) {
+    const price = parseTypedNumber(draft);
+    if (price == null || price < 0) {
       toast.error("That is not a price.");
       setDraft(null);
       return;
@@ -538,32 +539,5 @@ function PriceInput({ row }: { row: PricingRow }) {
         </Button>
       )}
     </div>
-  );
-}
-
-function ViewTab({
-  current,
-  value,
-  onSelect,
-  children,
-}: {
-  current: View;
-  value: View;
-  onSelect: (view: View) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(value)}
-      className={cn(
-        "rounded-md px-3 py-1.5 text-sm whitespace-nowrap transition-colors",
-        current === value
-          ? "bg-background font-medium shadow-xs ring-1 ring-border"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
   );
 }

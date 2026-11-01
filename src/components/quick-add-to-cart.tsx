@@ -10,6 +10,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { quickAddToCart } from "@/app/products/actions";
+import { parseTypedNumber } from "@/lib/numbers";
 import { cn } from "@/lib/utils";
 
 // Puts a catalog product straight into the cart at the supplier, without
@@ -79,8 +80,11 @@ export function QuickAddToCart({
           <input
             value={quantity}
             onChange={(e) => {
-              const parsed = Number(e.target.value.trim().replace(",", "."));
-              if (Number.isFinite(parsed)) setQuantity(Math.max(0, parsed));
+              const parsed =
+                e.target.value.trim() === ""
+                  ? 0
+                  : parseTypedNumber(e.target.value);
+              if (parsed != null) setQuantity(Math.max(0, parsed));
             }}
             inputMode="decimal"
             aria-label="Amount"

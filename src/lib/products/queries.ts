@@ -17,6 +17,7 @@ import {
   supplierPriceChanges,
   supplierProducts,
 } from "@/db/schema";
+import { latestDiscountLines } from "./discounts";
 
 export const PAGE_SIZE = 50;
 
@@ -67,20 +68,19 @@ function searchCondition(q: string): SQL | undefined {
   );
 }
 
-// The discount lives in the invoice history: the latest line per product
-// tells us whether we get one.
+// The discount lives in the invoice history. These match what the badges show:
+// no line means unknown, a line at zero or less means no discount.
 function discountCondition(filter: DiscountFilter): SQL {
-  const latestDiscount = sql`(
-    select l.discount_percent
-    from supplier_invoice_lines l
-    where l.item_no = ${supplierProducts.itemNo}
-    order by l.document_date desc, l.id desc
-    limit 1
-  )`;
+  const latest = latestDiscountLines();
+  const itemNo = supplierProducts.itemNo;
 
-  if (filter === "unknown") return sql`${latestDiscount} is null`;
-  if (filter === "yes") return sql`coalesce(${latestDiscount}, 0) > 0`;
-  return sql`${latestDiscount} = 0`;
+  if (filter === "unknown") {
+    return sql`${itemNo} not in (select item_no from ${latest})`;
+  }
+  if (filter === "yes") {
+    return sql`${itemNo} in (select item_no from ${latest} where discount_percent > 0)`;
+  }
+  return sql`${itemNo} in (select item_no from ${latest} where discount_percent <= 0)`;
 }
 
 export async function searchProducts(filters: ProductFilters) {

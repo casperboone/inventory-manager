@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, max } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import {
@@ -10,7 +10,8 @@ import {
   pricingSettings,
   salePriceChanges,
 } from "@/db/schema";
-import { getPricingOverview, getSalePriceHistory } from "@/lib/pricing/queries";
+import { nextCategoryPosition, nextItemPosition } from "@/lib/positions";
+import { getPricingItem, getSalePriceHistory } from "@/lib/pricing/queries";
 
 function failure(error: unknown, fallback: string) {
   return {
@@ -32,9 +33,10 @@ export async function setSalePrice(itemId: number, price: number | null) {
     return { ok: false as const, error: "Invalid price." };
   }
   try {
-    const { rows } = await getPricingOverview();
-    const row = rows.find((candidate) => candidate.id === itemId);
-    if (!row) return { ok: false as const, error: "Item not found." };
+    const row = (await getPricingItem(itemId))?.row;
+    if (!row || row.archivedAt) {
+      return { ok: false as const, error: "Item not found." };
+    }
 
     const rounded = price == null ? null : Math.round(price * 100) / 100;
     const changed = rounded !== row.salePrice;
@@ -113,17 +115,13 @@ export async function savePricingItem(input: PricingItemInput) {
         error: "A new item needs a name and a category.",
       };
     }
-    const [{ value }] = await db
-      .select({ value: max(assortmentItems.position) })
-      .from(assortmentItems)
-      .where(eq(assortmentItems.categoryId, orderCategoryId));
     const [created] = await db
       .insert(assortmentItems)
       .values({
         ...values,
         name,
         categoryId: orderCategoryId,
-        position: (value ?? -1) + 1,
+        position: await nextItemPosition(orderCategoryId),
       })
       .returning({ id: assortmentItems.id });
     revalidate();
@@ -169,13 +167,10 @@ export async function savePricingCategory(input: PricingCategoryFormInput) {
         .set({ ...values, notes: values.notes || null })
         .where(eq(pricingCategories.id, id));
     } else {
-      const [{ value }] = await db
-        .select({ value: max(pricingCategories.position) })
-        .from(pricingCategories);
       await db.insert(pricingCategories).values({
         ...values,
         notes: values.notes || null,
-        position: (value ?? -1) + 1,
+        position: await nextCategoryPosition(pricingCategories),
       });
     }
     revalidate();

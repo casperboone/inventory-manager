@@ -37,6 +37,7 @@ import {
   setItemArchived,
 } from "./actions";
 import { suggestQueries } from "@/lib/images/search";
+import { parseTypedNumber } from "@/lib/numbers";
 import { ImagePicker } from "./image-picker";
 import { ProductPicker } from "./product-picker";
 
@@ -126,7 +127,9 @@ function ItemForm({
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const targetValue = target.trim().replace(",", ".");
+    // Empty clears the target; anything unreadable is for the server to refuse.
+    const targetValue =
+      target.trim() === "" ? null : (parseTypedNumber(target) ?? Number.NaN);
     const supplierProductId = product
       ? product.id
       : unlinked
@@ -141,7 +144,7 @@ function ItemForm({
           categoryId === NEW_CATEGORY ? undefined : Number(categoryId),
         newCategoryName:
           categoryId === NEW_CATEGORY ? newCategory.trim() : undefined,
-        target: targetValue === "" ? null : Number(targetValue),
+        target: targetValue,
         supplierProductId,
         note: note.trim() || null,
       });

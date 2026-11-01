@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, gt, max } from "drizzle-orm";
+import { eq, gt } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { z } from "zod";
 import { db } from "@/db";
@@ -17,6 +17,7 @@ import {
 } from "@/lib/supplier/cart-service";
 import { logger } from "@/lib/logger";
 import { deleteItemImage, saveItemImageFromUrl } from "@/lib/images/store";
+import { nextCategoryPosition, nextItemPosition } from "@/lib/positions";
 import {
   searchProductImages,
   type ImageCandidate,
@@ -89,12 +90,12 @@ export async function saveAssortmentItem(input: ItemInput) {
       if (existing) {
         categoryId = existing.id;
       } else {
-        const [{ value }] = await db
-          .select({ value: max(assortmentCategories.position) })
-          .from(assortmentCategories);
         const [created] = await db
           .insert(assortmentCategories)
-          .values({ name: newCategoryName, position: (value ?? -1) + 1 })
+          .values({
+            name: newCategoryName,
+            position: await nextCategoryPosition(assortmentCategories),
+          })
           .returning({ id: assortmentCategories.id });
         categoryId = created.id;
       }
@@ -116,17 +117,13 @@ export async function saveAssortmentItem(input: ItemInput) {
         })
         .where(eq(assortmentItems.id, id));
     } else {
-      const [{ value }] = await db
-        .select({ value: max(assortmentItems.position) })
-        .from(assortmentItems)
-        .where(eq(assortmentItems.categoryId, categoryId));
       await db.insert(assortmentItems).values({
         name,
         categoryId,
         target,
         supplierProductId,
         note,
-        position: (value ?? -1) + 1,
+        position: await nextItemPosition(categoryId),
       });
     }
 
@@ -199,17 +196,13 @@ export async function deleteEmptyCategory(categoryId: number) {
 // Quick note lines: created empty and typed straight into the list.
 export async function createNote(categoryId: number, text = "") {
   try {
-    const [{ value }] = await db
-      .select({ value: max(assortmentItems.position) })
-      .from(assortmentItems)
-      .where(eq(assortmentItems.categoryId, categoryId));
     const [created] = await db
       .insert(assortmentItems)
       .values({
         categoryId,
         kind: "note",
         name: text,
-        position: (value ?? -1) + 1,
+        position: await nextItemPosition(categoryId),
       })
       .returning({ id: assortmentItems.id });
     revalidatePath("/assortment");

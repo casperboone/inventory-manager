@@ -38,6 +38,7 @@ import { toast } from "sonner";
 import { DiscountBadge } from "@/components/discount-badge";
 import { ItemImage } from "@/components/item-image";
 import { OpenItemLink } from "@/components/item-links";
+import { ViewTab } from "@/components/section-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,6 +48,7 @@ import type {
   AssortmentRow,
 } from "@/lib/assortment/queries";
 import { formatPrice } from "@/lib/format";
+import { parseTypedNumber } from "@/lib/numbers";
 import { cn } from "@/lib/utils";
 import {
   clearOrderList,
@@ -661,10 +663,9 @@ function ItemRow({
           <input
             value={quantity === 0 ? "" : quantity}
             onChange={(e) => {
-              const value = e.target.value.trim().replace(",", ".");
-              if (value === "") return onChange(0);
-              const parsed = Number(value);
-              if (Number.isFinite(parsed)) onChange(parsed);
+              if (e.target.value.trim() === "") return onChange(0);
+              const parsed = parseTypedNumber(e.target.value);
+              if (parsed != null) onChange(parsed);
             }}
             inputMode="decimal"
             placeholder="0"
@@ -751,33 +752,6 @@ function NoteRow({
         </>
       )}
     </li>
-  );
-}
-
-function ViewTab({
-  current,
-  value,
-  onSelect,
-  children,
-}: {
-  current: View;
-  value: View;
-  onSelect: (view: View) => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onSelect(value)}
-      className={cn(
-        "rounded-md px-3 py-1.5 text-sm transition-colors",
-        current === value
-          ? "bg-background font-medium shadow-xs ring-1 ring-border"
-          : "text-muted-foreground hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
   );
 }
 
