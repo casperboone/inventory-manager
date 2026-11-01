@@ -210,7 +210,9 @@ function PricingItemForm({
               "Not linked to a Rust Food product.")
             : "For what we buy somewhere other than Rust Food. It also shows on the order page, to order by hand."}
         </DialogDescription>
-        {item && <OpenItemLink itemId={item.id} />}
+        {item && (
+          <OpenItemLink itemId={item.id} label="Open item" className="w-fit" />
+        )}
       </DialogHeader>
 
       <form onSubmit={onSubmit} className="space-y-4">

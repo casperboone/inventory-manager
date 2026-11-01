@@ -2,18 +2,17 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   AlertTriangleIcon,
   BanknoteIcon,
   ArrowLeftIcon,
-  ArrowUpRightIcon,
   CheckIcon,
   PlusIcon,
   SearchIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ItemImage } from "@/components/item-image";
+import { OpenItemLink } from "@/components/item-links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -284,21 +283,21 @@ function PricingTableRow({
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <button
-                type="button"
-                onClick={onEdit}
-                className="text-left font-medium underline-offset-2 hover:underline"
-              >
-                {row.name}
-              </button>
-              <Link
-                href={`/items/${row.id}`}
-                title="Open item"
-                aria-label={`Open ${row.name}`}
-                className="-m-1 p-1 text-muted-foreground hover:text-foreground"
-              >
-                <ArrowUpRightIcon className="size-3.5" />
-              </Link>
+              {/* Together, so the arrow can't wrap away from the name. */}
+              <span className="flex min-w-0 items-start gap-1">
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="min-w-0 text-left font-medium underline-offset-2 hover:underline"
+                >
+                  {row.name}
+                </button>
+                <OpenItemLink
+                  itemId={row.id}
+                  name={row.name}
+                  className="shrink-0"
+                />
+              </span>
               {pricingCategory && (
                 <Tooltip>
                   <TooltipTrigger
