@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { DiscountBadge } from "@/components/discount-badge";
+import { isOnOurList, ItemLinks } from "@/components/item-links";
 import { ProductImage } from "@/components/product-image";
 import { QuickAddToCart } from "@/components/quick-add-to-cart";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,7 @@ import {
 } from "@/components/ui/table";
 import type { SupplierProduct } from "@/db/schema";
 import { formatPrice } from "@/lib/format";
+import type { ItemLink } from "@/lib/items/queries";
 import { NO_IMAGE_TTL_MS } from "@/lib/supplier/image-service";
 import type { DiscountStatus } from "@/lib/products/discount-types";
 import type { ProductSort } from "@/lib/products/queries";
@@ -48,6 +50,7 @@ export function ProductsTable({
   newImportId,
   renderPrice,
   discounts,
+  items,
   emptyMessage = "No products found.",
 }: {
   products: SupplierProduct[];
@@ -57,6 +60,8 @@ export function ProductsTable({
   renderPrice?: (product: SupplierProduct) => React.ReactNode;
   // Line discount per item number, as last invoiced.
   discounts?: Map<string, DiscountStatus>;
+  // Our own items per item number, for the products that have one.
+  items?: Map<string, ItemLink[]>;
   emptyMessage?: string;
 }) {
   return (
@@ -118,8 +123,8 @@ export function ProductsTable({
                   {newImportId && product.firstImportId === newImportId && (
                     <Badge>New</Badge>
                   )}
-                  {product.inSupplierAssortment && (
-                    <Badge variant="secondary">Assortment</Badge>
+                  {isOnOurList(items?.get(product.itemNo)) && (
+                    <Badge variant="secondary">On our list</Badge>
                   )}
                   {product.removedAt && (
                     <Badge variant="outline">Removed</Badge>
@@ -130,6 +135,7 @@ export function ProductsTable({
                     {product.description2}
                   </div>
                 )}
+                <ItemLinks items={items?.get(product.itemNo)} />
               </TableCell>
               <TableCell className="text-xs text-muted-foreground">
                 {product.unitOfMeasure ?? "—"}

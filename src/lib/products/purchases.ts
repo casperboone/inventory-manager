@@ -195,10 +195,18 @@ export async function getPurchaseLines(
 // Same rules as above: credit notes count against it, open orders and
 // deposits are left out.
 export async function getQuantitiesByYear(
-  years: string[]
+  years: string[],
+  // Leave out for every product.
+  itemNos?: string[]
 ): Promise<Map<string, Map<string, number>>> {
   const result = new Map<string, Map<string, number>>();
   if (years.length === 0) return result;
+  const itemFilter = itemNos
+    ? sql`and item_no in (${sql.join(
+        itemNos.map((itemNo) => sql`${itemNo}`),
+        sql`, `
+      )})`
+    : sql``;
   const rows = await db.all<{ item_no: string; year: string; quantity: number }>(
     sql`
       select
@@ -212,6 +220,7 @@ export async function getQuantitiesByYear(
           years.map((year) => sql`${year}`),
           sql`, `
         )})
+        ${itemFilter}
       group by item_no, year
     `
   );
@@ -277,4 +286,17 @@ export async function getProductPurchaseHistory(
     discountPercent: row.discount_percent,
     amount: row.amount,
   }));
+}
+
+// The newest line that says what a unit cost us. Returns on an invoice have a
+// negative quantity and free goods come to nothing, so neither is a price.
+export function lastPaidLine(lines: PurchaseDocumentLine[]) {
+  return (
+    lines.find(
+      (line) =>
+        line.documentType === "invoice" &&
+        line.netUnitPrice != null &&
+        line.netUnitPrice > 0
+    ) ?? null
+  );
 }

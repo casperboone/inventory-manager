@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   AlertTriangleIcon,
   BanknoteIcon,
@@ -11,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { ItemImage } from "@/components/item-image";
+import { OpenItemLink } from "@/components/item-links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -20,13 +22,9 @@ import {
 } from "@/components/ui/tooltip";
 import type { AssortmentCategory, PricingCategory } from "@/db/schema";
 import { formatPercent, formatPrice } from "@/lib/format";
-import type {
-  MissingField,
-  PricingOverview,
-  PricingRow,
-} from "@/lib/pricing/queries";
+import type { PricingOverview, PricingRow } from "@/lib/pricing/queries";
+import { priceToneStyle, signalChips } from "@/lib/pricing/signals";
 import { cn } from "@/lib/utils";
-import { priceTone } from "@/lib/pricing/calc";
 import { setSalePrice } from "./actions";
 import {
   PricingItemDialog,
@@ -35,17 +33,11 @@ import {
 
 type View = "all" | "attention" | "notForSale";
 
-const MISSING_LABELS: Record<MissingField, string> = {
-  category: "pricing category",
-  purchasePrice: "purchase price",
-  portions: "portions",
-  salePrice: "sale price",
-};
-
 function needsAttention(row: PricingRow) {
   const { missing, belowAdvice, lowMargin, costChanged, cheapAlcohol } =
     row.signals;
   return (
+    row.supplierRemoved ||
     missing.length > 0 ||
     belowAdvice ||
     lowMargin ||
@@ -57,14 +49,22 @@ function needsAttention(row: PricingRow) {
 export function PricingTable({
   overview,
   orderCategories,
+  initialItem,
 }: {
   overview: PricingOverview;
   orderCategories: AssortmentCategory[];
+  // From the URL: its dialog starts open, over the list it's in.
+  initialItem: PricingRow | null;
 }) {
   const { rows, categories, reference, years } = overview;
-  const [view, setView] = useState<View>("all");
+  const router = useRouter();
+  const [view, setView] = useState<View>(
+    initialItem?.notForSale ? "notForSale" : "all",
+  );
   const [search, setSearch] = useState("");
-  const [dialog, setDialog] = useState<PricingDialogState | null>(null);
+  const [dialog, setDialog] = useState<PricingDialogState | null>(
+    initialItem && { mode: "edit", itemId: initialItem.id },
+  );
 
   const forSale = rows.filter((row) => !row.notForSale);
   const attentionCount = forSale.filter(needsAttention).length;
@@ -244,7 +244,11 @@ export function PricingTable({
         categories={categories}
         orderCategories={orderCategories}
         priceRounding={overview.settings.priceRounding}
-        onClose={() => setDialog(null)}
+        onClose={() => {
+          setDialog(null);
+          // Or a reload would open it again.
+          if (initialItem) router.replace("/pricing", { scroll: false });
+        }}
       />
     </div>
   );
@@ -279,13 +283,21 @@ function PricingTableRow({
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <button
-                type="button"
-                onClick={onEdit}
-                className="text-left font-medium underline-offset-2 hover:underline"
-              >
-                {row.name}
-              </button>
+              {/* Together, so the arrow can't wrap away from the name. */}
+              <span className="flex min-w-0 items-start gap-1">
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="min-w-0 text-left font-medium underline-offset-2 hover:underline"
+                >
+                  {row.name}
+                </button>
+                <OpenItemLink
+                  itemId={row.id}
+                  name={row.name}
+                  className="shrink-0"
+                />
+              </span>
               {pricingCategory && (
                 <Tooltip>
                   <TooltipTrigger
@@ -409,59 +421,10 @@ function Signals({
   referenceName?: string;
   referenceAlcoholPrice: number | null;
 }) {
-  const { signals } = row;
-  const chips: {
-    key: string;
-    label: string;
-    detail: string;
-    tone: "warn" | "bad";
-  }[] = [];
-
-  if (signals.missing.length > 0) {
-    chips.push({
-      key: "missing",
-      label: "Missing data",
-      detail: `No ${signals.missing.map((field) => MISSING_LABELS[field]).join(", ")} yet.`,
-      tone: "warn",
-    });
-  }
-  if (signals.lowMargin) {
-    chips.push({
-      key: "margin",
-      label: "Low margin",
-      detail: "The margin is below the category's premium margin.",
-      tone: "bad",
-    });
-  }
-  if (
-    signals.belowAdvice &&
-    row.salePrice != null &&
-    row.adviceRounded != null
-  ) {
-    chips.push({
-      key: "advice",
-      label: `−${formatPrice(row.adviceRounded - row.salePrice)} vs advice`,
-      detail: `Advice is ${formatPrice(row.adviceRounded)}.`,
-      tone: "warn",
-    });
-  }
-  if (signals.costChanged && row.cost != null && row.salePriceCost != null) {
-    const diff = row.cost - row.salePriceCost;
-    chips.push({
-      key: "cost",
-      label: `Cost ${diff > 0 ? "up" : "down"} ${formatPrice(Math.abs(diff))}`,
-      detail: `A portion cost ${formatPrice(row.salePriceCost)} when the price was set, now ${formatPrice(row.cost)}. Save the price again to accept.`,
-      tone: diff > 0 ? "bad" : "warn",
-    });
-  }
-  if (signals.cheapAlcohol) {
-    chips.push({
-      key: "alcohol",
-      label: "Cheap alcohol",
-      detail: `10 ml of alcohol costs ${formatPrice(row.alcoholPrice)}, less than ${referenceName} (${formatPrice(referenceAlcoholPrice)}).`,
-      tone: "warn",
-    });
-  }
+  const chips = signalChips(row, {
+    name: referenceName,
+    alcoholPrice: referenceAlcoholPrice,
+  });
   if (chips.length === 0) return null;
 
   return (
@@ -524,7 +487,7 @@ function PriceInput({ row }: { row: PricingRow }) {
     else save(price);
   }
 
-  const tone = priceTone(row.salePrice, row.advice);
+  const tone = priceToneStyle(row.salePrice, row.advice);
 
   const canUseAdvice =
     row.adviceRounded != null &&
@@ -547,19 +510,8 @@ function PriceInput({ row }: { row: PricingRow }) {
         placeholder="—"
         aria-label={`Price of ${row.name}`}
         disabled={pending}
-        title={
-          tone === "above"
-            ? "Above the advice"
-            : tone === "below"
-              ? "Below the advice"
-              : undefined
-        }
-        className={cn(
-          "h-7 w-16 px-1.5 text-right tabular-nums",
-          tone === "above" &&
-            "border-green-600/30 bg-green-100 dark:bg-green-500/20",
-          tone === "below" && "border-red-600/30 bg-red-100 dark:bg-red-500/20",
-        )}
+        title={tone?.title}
+        className={cn("h-7 w-16 px-1.5 text-right tabular-nums", tone?.className)}
       />
       {canUseAdvice && (
         <Button

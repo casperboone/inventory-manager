@@ -11,7 +11,7 @@ npm run db:migrate
 npm run dev
 ```
 
-Then press **Import products** on http://localhost:3000.
+Then press **Import products** on http://localhost:3000/imports.
 
 ## Assortment and ordering
 
@@ -100,10 +100,12 @@ can read the contents from the supplier's description ("24/20CL", "FUST
 supplier item*: they get a manual purchase price and also show on the order
 page, where the review lists them to order by hand.
 
-Rows are flagged when data is missing, the price is more than the tolerance
-(10%) below the advice, the margin is below the premium margin, the cost per
-portion moved since the price was last saved (save it again to accept), or
-10 ml of alcohol is cheaper than in the reference drink (Queer Beer).
+Rows are flagged when Rust no longer lists the product (without a manual
+price, the cost keeps using its last catalog price), data is missing, the price
+is more than the tolerance (10%) below the advice, the margin is below the
+premium margin, the cost per portion moved since the price was last saved (save
+it again to accept), or 10 ml of alcohol is cheaper than in the reference drink
+(Queer Beer).
 
 The sheet was imported once with
 `npm run pricing:import -- Prijsberekening.xlsx` (dry run; add `--apply` to
@@ -217,7 +219,8 @@ anything that talks to the supplier.
 Each import records which products are new, which prices changed and which
 products disappeared from the catalog. Products are never deleted, only marked
 removed. Partial imports (a row limit or an unreadable row) never mark anything
-removed.
+removed. An import's page marks the products on our own list and can narrow to
+just those.
 
 | Command | |
 | --- | --- |

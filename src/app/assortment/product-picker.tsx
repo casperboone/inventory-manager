@@ -91,10 +91,11 @@ export function ProductPicker({
           type="button"
           variant="outline"
           size="sm"
+          className="max-w-full"
           onClick={() => setQuery(suggestion)}
         >
           <SearchIcon />
-          Search for “{suggestion}”
+          <span className="truncate">Search for “{suggestion}”</span>
         </Button>
       )}
 

@@ -35,7 +35,6 @@ export type ProductFilters = {
   q?: string;
   unit?: string;
   status?: ProductStatus;
-  assortment?: boolean;
   // Only products first seen in this import.
   newInImportId?: number;
   // Filter on the line discount we last saw on an invoice.
@@ -91,7 +90,6 @@ export async function searchProducts(filters: ProductFilters) {
     filters.unit ? eq(supplierProducts.unitOfMeasure, filters.unit) : undefined,
     status === "active" ? isNull(supplierProducts.removedAt) : undefined,
     status === "removed" ? isNotNull(supplierProducts.removedAt) : undefined,
-    filters.assortment ? eq(supplierProducts.inSupplierAssortment, true) : undefined,
     filters.newInImportId
       ? eq(supplierProducts.firstImportId, filters.newInImportId)
       : undefined,
@@ -153,6 +151,15 @@ export async function getImport(id: number) {
   return db.query.supplierImports.findFirst({
     where: eq(supplierImports.id, id),
   });
+}
+
+// What the catalog price of one product did over time, newest first.
+export async function getProductPriceChanges(productId: number) {
+  return db
+    .select()
+    .from(supplierPriceChanges)
+    .where(eq(supplierPriceChanges.productId, productId))
+    .orderBy(desc(supplierPriceChanges.id));
 }
 
 export async function getImportChanges(importId: number) {

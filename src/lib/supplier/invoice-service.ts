@@ -7,9 +7,10 @@ import {
   resetSupplierSession,
 } from "./session";
 
-// Invoices are the only place the supplier shows the line discount
-// ("regelkorting"): the catalog, the cart and open orders all quote the gross
-// price. So the discount per product is learned from what we were invoiced.
+// Invoices and open orders are the only places the supplier shows the line
+// discount ("regelkorting"): the catalog price is already net of it and the
+// cart quotes the gross price. So the discount per product is learned from
+// these documents.
 const INVOICE_COLUMNS = [
   "Document_Date",
   "Document_No",
@@ -63,7 +64,9 @@ export type InvoiceLine = {
 function parseDutchDate(value: string | null | undefined): Date | null {
   const match = value?.match(/^(\d{2})-(\d{2})-(\d{4})$/);
   if (!match) return null;
-  return new Date(Number(match[3]), Number(match[2]) - 1, Number(match[1]));
+  return new Date(
+    Date.UTC(Number(match[3]), Number(match[2]) - 1, Number(match[1]))
+  );
 }
 
 function parseNumber(value: string | null | undefined): number | null {

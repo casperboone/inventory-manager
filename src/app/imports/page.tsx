@@ -29,17 +29,11 @@ export const maxDuration = 60;
 export const metadata = { title: "Imports · Inventory Manager" };
 
 export default async function ImportsPage() {
-  const [imports, importRunning, discountSummary] = await Promise.all([
+  const [imports, importRunning, discounts] = await Promise.all([
     getImports(),
     isImportRunning(),
     getDiscountSummary(),
   ]);
-  const discounts = {
-    ...discountSummary,
-    // The supplier list is only consulted during an import; what we know is
-    // what we have read so far.
-    remaining: 0,
-  };
 
   return (
     <div className="space-y-5">
@@ -57,7 +51,7 @@ export default async function ImportsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <InvoiceImportButton remaining={discounts.remaining} />
+          <InvoiceImportButton />
           <ImportButton running={importRunning} />
         </div>
       </div>

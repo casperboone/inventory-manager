@@ -9,7 +9,7 @@ import { runInvoiceImport } from "@/app/imports/actions";
 
 // Invoices are fetched in batches, so one run stays inside the hosting time
 // limit; pressing again continues with the rest.
-export function InvoiceImportButton({ remaining }: { remaining?: number }) {
+export function InvoiceImportButton() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -34,7 +34,6 @@ export function InvoiceImportButton({ remaining }: { remaining?: number }) {
     <Button variant="outline" onClick={onClick} disabled={pending}>
       {pending ? <Loader2Icon className="animate-spin" /> : <ReceiptTextIcon />}
       {pending ? "Reading invoices…" : "Import invoices & orders"}
-      {!pending && remaining ? ` (${remaining})` : ""}
     </Button>
   );
 }

@@ -1,8 +1,10 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, XIcon } from "lucide-react";
 import { ImportStatusBadge } from "@/components/import-status-badge";
+import { isOnOurList } from "@/components/item-links";
 import { ProductsTable } from "@/components/products-table";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -11,6 +13,7 @@ import {
   formatNumber,
   formatPrice,
 } from "@/lib/format";
+import { getItemLinksByItemNo } from "@/lib/items/queries";
 import { getImport, getImportChanges } from "@/lib/products/queries";
 import { cn } from "@/lib/utils";
 
@@ -21,13 +24,31 @@ export async function generateMetadata(props: PageProps<"/imports/[id]">) {
 
 export default async function ImportPage(props: PageProps<"/imports/[id]">) {
   const { id } = await props.params;
+  const onlyOurs = (await props.searchParams).list === "1";
   const run = await getImport(Number(id));
   if (!run) notFound();
 
-  const { newProducts, priceChanges, removed } = await getImportChanges(run.id);
+  const [changes, items] = await Promise.all([
+    getImportChanges(run.id),
+    getItemLinksByItemNo(),
+  ]);
+  const onList = (product: { itemNo: string }) =>
+    isOnOurList(items.get(product.itemNo));
+  const ours = {
+    newProducts: changes.newProducts.filter(onList),
+    priceChanges: changes.priceChanges.filter((c) => onList(c.product)),
+    removed: changes.removed.filter(onList),
+  };
+  const { newProducts, priceChanges, removed } = onlyOurs ? ours : changes;
+  const oursCount =
+    ours.newProducts.length + ours.priceChanges.length + ours.removed.length;
   const priceByProduct = new Map(
     priceChanges.map((change) => [change.product.id, change])
   );
+
+  // "8 of 94" while narrowed, so what was left out stays visible.
+  const tabCount = (shown: unknown[], total: unknown[]) =>
+    onlyOurs ? `${shown.length} of ${total.length}` : total.length;
 
   const stats = [
     { label: "Products fetched", value: run.fetchedCount },
@@ -80,23 +101,54 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
       </div>
 
       <Tabs defaultValue="new">
-        <TabsList>
-          <TabsTrigger value="new">New ({newProducts.length})</TabsTrigger>
-          <TabsTrigger value="prices">
-            Price changes ({priceChanges.length})
-          </TabsTrigger>
-          <TabsTrigger value="removed">Removed ({removed.length})</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList className="max-w-full justify-start overflow-x-auto">
+            <TabsTrigger value="new">
+              New ({tabCount(newProducts, changes.newProducts)})
+            </TabsTrigger>
+            <TabsTrigger value="prices">
+              Price changes ({tabCount(priceChanges, changes.priceChanges)})
+            </TabsTrigger>
+            <TabsTrigger value="removed">
+              Removed ({tabCount(removed, changes.removed)})
+            </TabsTrigger>
+          </TabsList>
+          {/* A soft navigation, so the open tab stays open. */}
+          <Button
+            variant={onlyOurs ? "secondary" : "outline"}
+            size="sm"
+            nativeButton={false}
+            render={
+              <Link
+                href={onlyOurs ? `/imports/${run.id}` : `/imports/${run.id}?list=1`}
+                scroll={false}
+              />
+            }
+          >
+            {onlyOurs && <XIcon />}
+            Only on our list ({oursCount})
+          </Button>
+        </div>
         <TabsContent value="new" className="mt-3">
           <ProductsTable
             products={newProducts}
-            emptyMessage="No new products in this import."
+            items={items}
+            emptyMessage={
+              onlyOurs
+                ? "None of the new products in this import are on our list."
+                : "No new products in this import."
+            }
           />
         </TabsContent>
         <TabsContent value="prices" className="mt-3">
           <ProductsTable
             products={priceChanges.map((change) => change.product)}
-            emptyMessage="No price changes in this import."
+            items={items}
+            emptyMessage={
+              onlyOurs
+                ? "None of the price changes in this import are on our list."
+                : "No price changes in this import."
+            }
             renderPrice={(product) => {
               const change = priceByProduct.get(product.id);
               if (!change) return formatPrice(product.unitPrice);
@@ -107,7 +159,12 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
         <TabsContent value="removed" className="mt-3">
           <ProductsTable
             products={removed}
-            emptyMessage="No products were removed from the catalog in this import."
+            items={items}
+            emptyMessage={
+              onlyOurs
+                ? "None of the products removed in this import are on our list."
+                : "No products were removed from the catalog in this import."
+            }
           />
         </TabsContent>
       </Tabs>

@@ -10,6 +10,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { OpenItemLink } from "@/components/item-links";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -189,9 +190,14 @@ function ItemForm({
           The name is what you see while ordering. Link a catalog product to
           order it and to show its price.
         </DialogDescription>
+        {item && (
+          <OpenItemLink itemId={item.id} label="Open item" className="w-fit" />
+        )}
       </DialogHeader>
 
-      <form onSubmit={onSubmit} className="space-y-4">
+      {/* min-w-0: as a grid item the form would otherwise widen the dialog to
+          fit a long supplier description, even though that text truncates. */}
+      <form onSubmit={onSubmit} className="min-w-0 space-y-4">
         <div className="space-y-2">
           <Label htmlFor="item-name">Name</Label>
           <Input
@@ -283,7 +289,7 @@ function ItemForm({
             />
             <p className="text-xs text-muted-foreground">
               {supplierHasImage
-                ? "An image of our own replaces the supplier's photo everywhere."
+                ? "An image of our own replaces the supplier's photo on the order and pricing pages; the catalog keeps the supplier's."
                 : "The supplier has no photo for this item, so pick one here."}{" "}
               It is stored with the item.
             </p>

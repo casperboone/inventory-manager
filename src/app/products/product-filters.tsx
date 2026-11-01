@@ -4,9 +4,7 @@ import { useState, useTransition } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Loader2Icon, SearchIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -64,7 +62,6 @@ export function ProductFilters({ units }: { units: string[] }) {
     searchParams.has("q") ||
     searchParams.has("unit") ||
     searchParams.has("status") ||
-    searchParams.has("assortment") ||
     searchParams.has("discount") ||
     searchParams.has("new");
 
@@ -145,16 +142,6 @@ export function ProductFilters({ units }: { units: string[] }) {
           ))}
         </SelectContent>
       </Select>
-
-      <Label className="flex items-center gap-2 text-sm font-normal">
-        <Checkbox
-          checked={searchParams.get("assortment") === "1"}
-          onCheckedChange={(checked) =>
-            update({ assortment: checked ? "1" : null })
-          }
-        />
-        In webshop assortment
-      </Label>
 
       {hasFilters && (
         <Button

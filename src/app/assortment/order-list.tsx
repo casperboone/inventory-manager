@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   closestCenter,
@@ -27,7 +28,6 @@ import {
   CheckIcon,
   GripVerticalIcon,
   MinusIcon,
-  PencilIcon,
   PlusIcon,
   SearchIcon,
   StickyNoteIcon,
@@ -37,6 +37,7 @@ import {
 import { toast } from "sonner";
 import { DiscountBadge } from "@/components/discount-badge";
 import { ItemImage } from "@/components/item-image";
+import { OpenItemLink } from "@/components/item-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,15 +66,23 @@ export function OrderList({
   categories,
   archived,
   allCategories,
+  initialItem,
 }: {
   categories: AssortmentCategoryWithItems[];
   archived: AssortmentCategoryWithItems[];
   allCategories: AssortmentCategory[];
+  // From the URL: its dialog starts open, over the list it's in.
+  initialItem: AssortmentRow | null;
 }) {
-  const [view, setView] = useState<View>("all");
+  const router = useRouter();
+  const [view, setView] = useState<View>(
+    initialItem?.archivedAt ? "archived" : "all",
+  );
   const [reordering, setReordering] = useState(false);
   const [search, setSearch] = useState("");
-  const [dialog, setDialog] = useState<ItemDialogState | null>(null);
+  const [dialog, setDialog] = useState<ItemDialogState | null>(
+    initialItem && { mode: "edit", itemId: initialItem.id },
+  );
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState<Record<number, string>>({});
   // Local order, applied on top of the server's until it catches up.
@@ -424,7 +433,11 @@ export function OrderList({
         state={dialog}
         item={dialogItem}
         categories={allCategories}
-        onClose={() => setDialog(null)}
+        onClose={() => {
+          setDialog(null);
+          // Or a reload would open it again.
+          if (initialItem) router.replace("/assortment", { scroll: false });
+        }}
       />
     </div>
   );
@@ -573,40 +586,56 @@ function ItemRow({
         alt={item.supplierDescription ?? item.name}
       />
 
-      <button
-        type="button"
-        onClick={onEdit}
-        disabled={reordering}
-        className="group min-w-0 flex-1 text-left"
-      >
-        <span className="flex items-start gap-1.5 font-medium">
-          <span className="line-clamp-2">{item.name}</span>
+      {/* All of this opens the dialog, except for the arrow after the name. */}
+      <div className="relative min-w-0 flex-1">
+        <div className="flex items-start gap-1">
+          <button
+            type="button"
+            onClick={onEdit}
+            disabled={reordering}
+            className="min-w-0 text-left font-medium underline-offset-2 not-disabled:hover:underline after:absolute after:inset-0"
+          >
+            <span className="line-clamp-2">{item.name}</span>
+          </button>
           {!reordering && (
-            <PencilIcon className="mt-1 size-3 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+            // The margin lends it some of the row's gap, so names keep their
+            // width on a phone.
+            <span className="relative mt-0.5 -mr-1 flex shrink-0">
+              <OpenItemLink itemId={item.id} name={item.name} />
+            </span>
           )}
-        </span>
-        <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-          {item.unitOfMeasure && <span>{item.unitOfMeasure}</span>}
-          {item.unitPrice != null && <span>{formatPrice(item.unitPrice)}</span>}
-          {item.discount && item.discount.kind !== "unknown" && (
-            <DiscountBadge
-              status={item.discount}
-              unitPrice={item.unitPrice}
-              className="px-1 py-0 text-[10px]"
-            />
-          )}
-          {!item.supplierProductId && (
-            <Badge variant="outline" className="gap-1 text-amber-700">
-              <AlertTriangleIcon className="size-3" />
-              Not linked
-            </Badge>
-          )}
-          {item.supplierRemoved && (
-            <Badge variant="outline">Gone from catalog</Badge>
-          )}
-          {item.note && <span className="italic">{item.note}</span>}
-        </span>
-      </button>
+        </div>
+        {/* Above the name's button, so the discount's tooltip still works. */}
+        <button
+          type="button"
+          tabIndex={-1}
+          onClick={onEdit}
+          disabled={reordering}
+          className="relative block w-full text-left"
+        >
+          <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+            {item.unitOfMeasure && <span>{item.unitOfMeasure}</span>}
+            {item.unitPrice != null && <span>{formatPrice(item.unitPrice)}</span>}
+            {item.discount && item.discount.kind !== "unknown" && (
+              <DiscountBadge
+                status={item.discount}
+                unitPrice={item.unitPrice}
+                className="px-1 py-0 text-[10px]"
+              />
+            )}
+            {!item.supplierProductId && (
+              <Badge variant="outline" className="gap-1 text-amber-700">
+                <AlertTriangleIcon className="size-3" />
+                Not linked
+              </Badge>
+            )}
+            {item.supplierRemoved && (
+              <Badge variant="outline">Gone from catalog</Badge>
+            )}
+            {item.note && <span className="italic">{item.note}</span>}
+          </span>
+        </button>
+      </div>
 
       {!reordering && (
         <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">

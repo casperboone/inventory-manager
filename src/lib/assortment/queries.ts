@@ -158,16 +158,6 @@ export async function getCategories() {
     .orderBy(asc(assortmentCategories.position), asc(assortmentCategories.id));
 }
 
-// Next position in a category, so new items land at the bottom.
-export async function nextItemPosition(categoryId: number) {
-  const last = await db.query.assortmentItems.findFirst({
-    where: eq(assortmentItems.categoryId, categoryId),
-    orderBy: (items, { desc }) => desc(items.position),
-    columns: { position: true },
-  });
-  return (last?.position ?? -1) + 1;
-}
-
 // Catalog search for linking an item to a supplier product.
 export async function searchCatalogForPicker(query: string, limit = 8) {
   const { searchProducts } = await import("@/lib/products/queries");
@@ -185,21 +175,6 @@ export async function searchCatalogForPicker(query: string, limit = 8) {
 export type PickerProduct = Awaited<
   ReturnType<typeof searchCatalogForPicker>
 >[number];
-
-export async function getSupplierProductById(id: number) {
-  const product = await db.query.supplierProducts.findFirst({
-    where: eq(supplierProducts.id, id),
-    columns: {
-      id: true,
-      itemNo: true,
-      description: true,
-      unitOfMeasure: true,
-      unitPrice: true,
-      imageStatus: true,
-    },
-  });
-  return product ?? null;
-}
 
 export type OrderReview = {
   // Lines that can be added to the supplier cart automatically.
