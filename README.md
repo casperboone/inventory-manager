@@ -151,9 +151,9 @@ Everything that comes from Rust Food's own bookkeeping sits behind one nav
 entry, since it is secondary to ordering: purchase history, invoices and
 orders.
 
-The section header says how much has been imported and how far it runs, with
-the import button right there, so you can check and top it up from the pages
-that use the data. (It is also still on the imports page.)
+The section header says when the documents last synced, with the import button
+right there, so you can check and top them up from the pages that use the data.
+(It is also still on the imports page.)
 
 `/financials/invoices` lists the posted invoices and credit notes, searchable
 by document number or by what is on them (searching "fireball" gives every
@@ -222,6 +222,12 @@ removed. Partial imports (a row limit or an unreadable row) never mark anything
 removed. An import's page marks the products on our own list and can narrow to
 just those.
 
+Catalog and document imports share one run log (`supplier_imports`, shown on
+`/imports`), with a guard and a stale-run timeout per kind. They stay separate
+requests, because the catalog alone takes most of the hosting time limit.
+Refreshing open orders and the outstanding list fetches everything first and
+writes in one batch, so a failure leaves the old rows in place.
+
 | Command | |
 | --- | --- |
 | `npm run supplier:import` | Same as the button |
@@ -253,7 +259,7 @@ own images are resized the same way on download.
 ## Deploying to Vercel
 
 The app is prepared for Vercel: pages that read the database render per
-request, the catalog import and cart calls get `maxDuration = 60`, product
+request, both imports and the cart calls get `maxDuration = 60`, product
 images are cached in the database instead of on disk (serverless has no
 persistent filesystem), and background image fetching uses `after()` so it
 survives the response.

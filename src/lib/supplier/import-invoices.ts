@@ -14,8 +14,11 @@ import {
   fetchOpenOrders,
   fetchOrderLines,
   pauseBetweenInvoices,
+  type InvoiceHeader,
+  type InvoiceLine,
   type PostedKind,
 } from "./invoice-service";
+import { failImportRun, finishImportRun, startImportRun } from "./import-runs";
 
 // One run fetches at most this many invoices, so a run stays well inside the
 // hosting time limit. Press again to continue where it left off.
@@ -38,50 +41,115 @@ export async function importSupplierInvoices(
 ): Promise<InvoiceImportResult> {
   const batch = options.batch ?? DEFAULT_BATCH;
 
-  const stored = await db
-    .select({
-      documentNo: supplierInvoices.documentNo,
-      amountIncludingVat: supplierInvoices.amountIncludingVat,
-    })
-    .from(supplierInvoices);
-  const known = new Set(stored.map((row) => row.documentNo));
-  // Documents imported before we read these fields; filled in from the list,
-  // which costs nothing extra because we walk it anyway.
-  const incomplete = new Set(
-    stored
-      .filter((row) => row.amountIncludingVat == null)
-      .map((row) => row.documentNo)
-  );
-
-  const invoices = await importPosted(
-    "PostedInvoices",
-    known,
-    batch,
-    incomplete
-  );
-  // Credit notes are few, so whatever is left of the batch is plenty.
-  const creditMemos = await importPosted(
-    "PostedCreditMemos",
-    known,
-    Math.max(5, batch - invoices.imported),
-    incomplete
-  );
-  const openOrders = await refreshOpenOrders();
-  const openEntries = await refreshOpenEntries();
-
-  const result = {
-    imported: invoices.imported,
-    lines: invoices.lines + creditMemos.lines,
-    remaining: invoices.remaining + creditMemos.remaining,
-    total: invoices.total,
-    openOrders,
-    creditMemos: creditMemos.imported,
-    openEntries,
+  const run = await startImportRun("documents");
+  // Filled in as the run goes, because what it did before failing stays done:
+  // posted documents are stored one at a time.
+  const progress = {
+    invoicesCount: 0,
+    creditMemosCount: 0,
+    linesCount: 0,
+    openOrdersCount: null as number | null,
+    openEntriesCount: null as number | null,
   };
-  logger.info(
-    `Invoice import: ${result.imported} invoices, ${result.creditMemos} credit notes, ${result.lines} lines, ${result.remaining} remaining, ${openOrders} open orders and ${openEntries} open entries refreshed.`
-  );
-  return result;
+
+  try {
+    const stored = await db
+      .select({
+        documentNo: supplierInvoices.documentNo,
+        amountIncludingVat: supplierInvoices.amountIncludingVat,
+      })
+      .from(supplierInvoices);
+    const known = new Set(stored.map((row) => row.documentNo));
+    // Documents imported before we read these fields; filled in from the list,
+    // which costs nothing extra because we walk it anyway.
+    const incomplete = new Set(
+      stored
+        .filter((row) => row.amountIncludingVat == null)
+        .map((row) => row.documentNo)
+    );
+
+    const invoices = await importPosted(
+      "PostedInvoices",
+      known,
+      batch,
+      incomplete,
+      (lines) => {
+        progress.invoicesCount++;
+        progress.linesCount += lines;
+      }
+    );
+    // Credit notes are few, so whatever is left of the batch is plenty.
+    const creditMemos = await importPosted(
+      "PostedCreditMemos",
+      known,
+      Math.max(5, batch - invoices.imported),
+      incomplete,
+      (lines) => {
+        progress.creditMemosCount++;
+        progress.linesCount += lines;
+      }
+    );
+    const openOrders = await refreshOpenOrders();
+    progress.openOrdersCount = openOrders;
+    const openEntries = await refreshOpenEntries();
+    progress.openEntriesCount = openEntries;
+
+    const remaining = invoices.remaining + creditMemos.remaining;
+    await finishImportRun(run.id, { ...progress, remainingCount: remaining });
+
+    logger.info(
+      `Import #${run.id} succeeded: ${progress.invoicesCount} invoices, ${progress.creditMemosCount} credit notes, ${progress.linesCount} lines, ${remaining} remaining, ${openOrders} open orders and ${openEntries} open entries refreshed.`
+    );
+    return {
+      imported: progress.invoicesCount,
+      lines: progress.linesCount,
+      remaining,
+      total: invoices.total,
+      openOrders,
+      creditMemos: progress.creditMemosCount,
+      openEntries,
+    };
+  } catch (error) {
+    await failImportRun(run.id, error, progress);
+    throw error;
+  }
+}
+
+function insertDocument(
+  document: InvoiceHeader,
+  lines: InvoiceLine[],
+  documentType: "invoice" | "creditmemo" | "order"
+): BatchItem<"sqlite">[] {
+  return [
+    db.insert(supplierInvoices).values({
+      documentNo: document.documentNo,
+      documentType,
+      documentDate: document.documentDate,
+      amount: document.amount,
+      amountIncludingVat: document.amountIncludingVat,
+      yourReference: document.yourReference,
+      salespersonCode: document.salespersonCode,
+      requestedDeliveryDate: document.requestedDeliveryDate,
+      promisedDeliveryDate: document.promisedDeliveryDate,
+      lineCount: lines.length,
+      // The same clock as the run's start and finish, which is how a run's
+      // page finds the documents it read.
+      importedAt: new Date(),
+    }),
+    ...lines.map((line) =>
+      db.insert(supplierInvoiceLines).values({
+        documentNo: document.documentNo,
+        documentType,
+        documentDate: document.documentDate,
+        itemNo: line.itemNo,
+        description: line.description,
+        quantity: line.quantity,
+        unitPrice: line.unitPrice,
+        discountPercent: line.discountPercent,
+        amount: line.amount,
+      })
+    ),
+  ];
 }
 
 // Walks a posted-document list newest first and stores the ones we lack.
@@ -89,11 +157,12 @@ async function importPosted(
   kind: PostedKind,
   known: Set<string>,
   batch: number,
-  incomplete: Set<string>
+  incomplete: Set<string>,
+  onStored: (lines: number) => void
 ) {
   const documentType = kind === "PostedInvoices" ? "invoice" : "creditmemo";
-  const missing: Awaited<ReturnType<typeof fetchInvoiceList>>["invoices"] = [];
-  const toComplete: typeof missing = [];
+  const missing: InvoiceHeader[] = [];
+  const toComplete: InvoiceHeader[] = [];
   let total = 0;
   let start = 0;
   const pageSize = 100;
@@ -113,47 +182,23 @@ async function importPosted(
   }
 
   const toImport = missing.slice(0, batch);
-  let lineCount = 0;
 
   for (const [index, invoice] of toImport.entries()) {
     if (index > 0) await pauseBetweenInvoices();
     const lines = await fetchInvoiceLines(invoice.documentNo, kind);
-
-    const statements: BatchItem<"sqlite">[] = [
-      db.insert(supplierInvoices).values({
-        documentNo: invoice.documentNo,
-        documentType,
-        documentDate: invoice.documentDate,
-        amount: invoice.amount,
-        amountIncludingVat: invoice.amountIncludingVat,
-        yourReference: invoice.yourReference,
-        lineCount: lines.length,
-      }),
-      ...lines.map((line) =>
-        db.insert(supplierInvoiceLines).values({
-          documentNo: invoice.documentNo,
-          documentType,
-          documentDate: invoice.documentDate,
-          itemNo: line.itemNo,
-          description: line.description,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          discountPercent: line.discountPercent,
-          amount: line.amount,
-        })
-      ),
-    ];
     await db.batch(
-      statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
+      insertDocument(invoice, lines, documentType) as [
+        BatchItem<"sqlite">,
+        ...BatchItem<"sqlite">[],
+      ]
     );
-    lineCount += lines.length;
+    onStored(lines.length);
   }
 
   await completeHeaders(toComplete);
 
   return {
     imported: toImport.length,
-    lines: lineCount,
     remaining: missing.length - toImport.length,
     total,
   };
@@ -161,7 +206,7 @@ async function importPosted(
 
 // Fills in the header fields of documents imported before we read them.
 async function completeHeaders(
-  documents: Awaited<ReturnType<typeof fetchInvoiceList>>["invoices"]
+  documents: InvoiceHeader[]
 ) {
   if (documents.length === 0) return;
   const statements: BatchItem<"sqlite">[] = documents.map((document) =>
@@ -179,113 +224,84 @@ async function completeHeaders(
 
 // Open orders already know their discounts, weeks before the invoice follows.
 // They still change, so they are re-read on every run rather than skipped.
+//
+// Everything is fetched before anything is written, and written in one batch
+// (one transaction), so a failure anywhere leaves the old rows in place.
 async function refreshOpenOrders(): Promise<number> {
   const orders = await fetchOpenOrders();
-  const numbers = orders.map((order) => order.documentNo);
-  await dropStaleOpenOrders(numbers);
-  if (orders.length === 0) return 0;
-
-  await db
-    .delete(supplierInvoiceLines)
-    .where(inArray(supplierInvoiceLines.documentNo, numbers));
-  await db
-    .delete(supplierInvoices)
-    .where(inArray(supplierInvoices.documentNo, numbers));
-
+  const fetched: { order: InvoiceHeader; lines: InvoiceLine[] }[] = [];
   for (const [index, order] of orders.entries()) {
     if (index > 0) await pauseBetweenInvoices();
-    const lines = await fetchOrderLines(order.documentNo);
-    const statements: BatchItem<"sqlite">[] = [
-      db.insert(supplierInvoices).values({
-        documentNo: order.documentNo,
-        documentType: "order",
-        documentDate: order.documentDate,
-        amount: order.amount,
-        amountIncludingVat: order.amountIncludingVat,
-        yourReference: order.yourReference,
-        salespersonCode: order.salespersonCode,
-        requestedDeliveryDate: order.requestedDeliveryDate,
-        promisedDeliveryDate: order.promisedDeliveryDate,
-        lineCount: lines.length,
-      }),
-      ...lines.map((line) =>
-        db.insert(supplierInvoiceLines).values({
-          documentNo: order.documentNo,
-          documentType: "order",
-          documentDate: order.documentDate,
-          itemNo: line.itemNo,
-          description: line.description,
-          quantity: line.quantity,
-          unitPrice: line.unitPrice,
-          discountPercent: line.discountPercent,
-          amount: line.amount,
-        })
-      ),
-    ];
-    await db.batch(
-      statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
-    );
+    fetched.push({ order, lines: await fetchOrderLines(order.documentNo) });
   }
+
+  // An order that has been invoiced disappears from the open list; its rows go
+  // along with the rest, so the invoice becomes the authority.
+  const stored = await db
+    .select({ documentNo: supplierInvoices.documentNo })
+    .from(supplierInvoices)
+    .where(eq(supplierInvoices.documentType, "order"));
+  const replaced = [
+    ...new Set([
+      ...stored.map((row) => row.documentNo),
+      ...orders.map((order) => order.documentNo),
+    ]),
+  ];
+  if (replaced.length === 0) return 0;
+
+  const statements: BatchItem<"sqlite">[] = [
+    db
+      .delete(supplierInvoiceLines)
+      .where(inArray(supplierInvoiceLines.documentNo, replaced)),
+    db
+      .delete(supplierInvoices)
+      .where(inArray(supplierInvoices.documentNo, replaced)),
+    ...fetched.flatMap(({ order, lines }) =>
+      insertDocument(order, lines, "order")
+    ),
+  ];
+  await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
 
   return orders.length;
 }
 
 // Outstanding payments change without us doing anything (they are settled by
-// bank transfer), so the whole list is replaced on every run.
+// bank transfer), so the whole list is replaced on every run, in one batch so
+// a failure leaves the old list in place.
 async function refreshOpenEntries(): Promise<number> {
   const entries = await fetchOpenEntries();
-  await db.delete(supplierOpenEntries);
-  if (entries.length === 0) return 0;
 
-  await db.insert(supplierOpenEntries).values(
-    entries.map((entry) => ({
-      documentNo: entry.documentNo,
-      documentType: entry.documentType,
-      documentDate: entry.documentDate,
-      description: entry.description,
-      orderNo: entry.orderNo,
-      amount: entry.amount,
-      remainingAmount: entry.remainingAmount,
-      dueDate: entry.dueDate,
-      paymentDiscountDate: entry.paymentDiscountDate,
-      refreshedAt: new Date(),
-    }))
-  );
+  const statements: BatchItem<"sqlite">[] = [db.delete(supplierOpenEntries)];
+  if (entries.length > 0) {
+    statements.push(
+      db.insert(supplierOpenEntries).values(
+        entries.map((entry) => ({
+          documentNo: entry.documentNo,
+          documentType: entry.documentType,
+          documentDate: entry.documentDate,
+          description: entry.description,
+          orderNo: entry.orderNo,
+          amount: entry.amount,
+          remainingAmount: entry.remainingAmount,
+          dueDate: entry.dueDate,
+          paymentDiscountDate: entry.paymentDiscountDate,
+          refreshedAt: new Date(),
+        }))
+      )
+    );
+  }
   // The outstanding list is the only place that names the order an invoice
   // came from, so the link is recorded while it is there to be had.
-  const linked = entries.filter((entry) => entry.orderNo);
-  if (linked.length > 0) {
-    const statements: BatchItem<"sqlite">[] = linked.map((entry) =>
+  for (const entry of entries) {
+    if (!entry.orderNo) continue;
+    statements.push(
       db
         .update(supplierInvoices)
         .set({ orderNo: entry.orderNo })
         .where(eq(supplierInvoices.documentNo, entry.documentNo))
     );
-    await db.batch(
-      statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
-    );
   }
+  await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
 
   return entries.length;
-}
-
-// An order that has been invoiced disappears from the open list; its rows are
-// dropped so the invoice becomes the authority.
-export async function dropStaleOpenOrders(currentNumbers: string[]) {
-  const stored = await db
-    .select({ documentNo: supplierInvoices.documentNo })
-    .from(supplierInvoices)
-    .where(eq(supplierInvoices.documentType, "order"));
-  const stale = stored
-    .map((row) => row.documentNo)
-    .filter((no) => !currentNumbers.includes(no));
-  if (stale.length === 0) return 0;
-
-  await db
-    .delete(supplierInvoiceLines)
-    .where(inArray(supplierInvoiceLines.documentNo, stale));
-  await db
-    .delete(supplierInvoices)
-    .where(inArray(supplierInvoices.documentNo, stale));
-  return stale.length;
 }

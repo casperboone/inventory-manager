@@ -64,30 +64,3 @@ export async function getDiscountStatuses(
 
   return statuses;
 }
-
-export async function getDiscountSummary() {
-  const [row] = await db.all<{
-    invoices: number;
-    items: number;
-    withDiscount: number;
-    latest: number | null;
-  }>(sql`
-    select
-      (select count(*) from supplier_invoices) as invoices,
-      (select count(distinct item_no) from supplier_invoice_lines) as items,
-      (select count(*) from (
-        select item_no, row_number() over (
-          partition by item_no order by document_date desc, id desc
-        ) rn, discount_percent
-        from supplier_invoice_lines
-      ) where rn = 1 and discount_percent > 0) as withDiscount,
-      (select max(document_date) from supplier_invoices) as latest
-  `);
-
-  return {
-    invoices: row?.invoices ?? 0,
-    items: row?.items ?? 0,
-    withDiscount: row?.withDiscount ?? 0,
-    latest: row?.latest ? new Date(row.latest * 1000) : null,
-  };
-}

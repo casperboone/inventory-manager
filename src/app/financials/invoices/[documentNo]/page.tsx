@@ -10,6 +10,10 @@ import { DocumentMeta, DocumentTotals } from "../../document-meta";
 
 export const dynamic = "force-dynamic";
 
+// The layout's invoice import runs as a server action from this page, and
+// maxDuration applies per page, so it gets the platform maximum here too.
+export const maxDuration = 60;
+
 export async function generateMetadata(
   props: PageProps<"/financials/invoices/[documentNo]">
 ) {
