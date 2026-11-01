@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatPercent, formatPrice } from "@/lib/format";
 import { getItemDetail, getItemName, type ItemLink } from "@/lib/items/queries";
-import { signalChips } from "@/lib/pricing/signals";
+import { priceToneStyle, signalChips } from "@/lib/pricing/signals";
 import type { DiscountStatus } from "@/lib/products/discount-types";
 import { cn } from "@/lib/utils";
 import { PurchaseDocumentTable } from "@/app/financials/purchase-history/purchase-document-table";
@@ -224,6 +224,7 @@ function PricingSection({ detail }: { detail: Detail }) {
     name: reference?.name,
     alcoholPrice: reference?.alcoholPrice ?? null,
   });
+  const tone = priceToneStyle(row.salePrice, row.advice);
 
   return (
     <Section
@@ -231,7 +232,18 @@ function PricingSection({ detail }: { detail: Detail }) {
       action={<EditLink href="/pricing">Pricing screen</EditLink>}
     >
       <Facts>
-        <Fact label="Sale price">{formatPrice(row.salePrice)}</Fact>
+        <Fact label="Sale price">
+          {tone ? (
+            <span
+              title={tone.title}
+              className={cn("rounded border px-1.5 py-0.5", tone.className)}
+            >
+              {formatPrice(row.salePrice)}
+            </span>
+          ) : (
+            formatPrice(row.salePrice)
+          )}
+        </Fact>
         <Fact label="Cost per portion">{formatPrice(row.cost)}</Fact>
         <Fact label="Advice">{formatPrice(row.adviceRounded)}</Fact>
         <Fact
