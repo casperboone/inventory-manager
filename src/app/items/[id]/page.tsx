@@ -469,9 +469,6 @@ function SupplierSection({ detail }: { detail: Detail }) {
             <span className="font-mono text-sm">{product.gtin}</span>
           </Fact>
         )}
-        <Fact label="In Rust assortment">
-          {product.inSupplierAssortment ? "Yes" : "No"}
-        </Fact>
         {discount && (
           <Fact label="Line discount" className="col-span-full">
             <DiscountDetail status={discount} unitPrice={product.unitPrice} />

@@ -123,9 +123,6 @@ export function ProductsTable({
                   {newImportId && product.firstImportId === newImportId && (
                     <Badge>New</Badge>
                   )}
-                  {product.inSupplierAssortment && (
-                    <Badge variant="secondary">Assortment</Badge>
-                  )}
                   {product.removedAt && (
                     <Badge variant="outline">Removed</Badge>
                   )}

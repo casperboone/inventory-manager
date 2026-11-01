@@ -48,7 +48,6 @@ export default async function ProductsPage(props: PageProps<"/products">) {
       q,
       unit,
       status,
-      assortment: first(params.assortment) === "1",
       newInImportId,
       discount:
         discountFilter === "yes" || discountFilter === "no" || discountFilter === "unknown"
