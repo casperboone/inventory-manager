@@ -176,7 +176,9 @@ export default async function ItemPage(props: PageProps<"/items/[id]">) {
         <div className="space-y-4">
           <Section
             title="Ordering"
-            action={<EditLink href="/assortment">Order list</EditLink>}
+            action={
+              <EditLink href={`/assortment?item=${item.id}`}>Order list</EditLink>
+            }
           >
             <Facts>
               <Fact label="Target">
@@ -218,7 +220,7 @@ export default async function ItemPage(props: PageProps<"/items/[id]">) {
 type Detail = NonNullable<Awaited<ReturnType<typeof getItemDetail>>>;
 
 function PricingSection({ detail }: { detail: Detail }) {
-  const { pricing, salePriceHistory } = detail;
+  const { item, pricing, salePriceHistory } = detail;
   const { row, category, reference } = pricing;
   const chips = signalChips(row, {
     name: reference?.name,
@@ -228,7 +230,12 @@ function PricingSection({ detail }: { detail: Detail }) {
   return (
     <Section
       title="Pricing"
-      action={<EditLink href="/pricing">Pricing screen</EditLink>}
+      action={
+        // The pricing screen only lists active items.
+        <EditLink href={item.archivedAt ? "/pricing" : `/pricing?item=${item.id}`}>
+          Pricing screen
+        </EditLink>
+      }
     >
       <Facts>
         <Fact label="Sale price">{formatPrice(row.salePrice)}</Fact>
@@ -399,7 +406,7 @@ function DiscountDetail({
 }
 
 function SupplierSection({ detail }: { detail: Detail }) {
-  const { product, priceChanges, discount, sharedWith } = detail;
+  const { item, product, priceChanges, discount, sharedWith } = detail;
 
   if (!product) {
     return (
@@ -407,7 +414,7 @@ function SupplierSection({ detail }: { detail: Detail }) {
         <Muted>
           Not linked to a Rust Food product. Link one in the{" "}
           <Link
-            href="/assortment"
+            href={`/assortment?item=${item.id}`}
             className="underline underline-offset-2 hover:text-foreground"
           >
             order list

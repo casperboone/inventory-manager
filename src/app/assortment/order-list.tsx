@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   closestCenter,
@@ -65,15 +66,23 @@ export function OrderList({
   categories,
   archived,
   allCategories,
+  initialItem,
 }: {
   categories: AssortmentCategoryWithItems[];
   archived: AssortmentCategoryWithItems[];
   allCategories: AssortmentCategory[];
+  // From the URL: its dialog starts open, over the list it's in.
+  initialItem: AssortmentRow | null;
 }) {
-  const [view, setView] = useState<View>("all");
+  const router = useRouter();
+  const [view, setView] = useState<View>(
+    initialItem?.archivedAt ? "archived" : "all",
+  );
   const [reordering, setReordering] = useState(false);
   const [search, setSearch] = useState("");
-  const [dialog, setDialog] = useState<ItemDialogState | null>(null);
+  const [dialog, setDialog] = useState<ItemDialogState | null>(
+    initialItem && { mode: "edit", itemId: initialItem.id },
+  );
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState<Record<number, string>>({});
   // Local order, applied on top of the server's until it catches up.
@@ -424,7 +433,11 @@ export function OrderList({
         state={dialog}
         item={dialogItem}
         categories={allCategories}
-        onClose={() => setDialog(null)}
+        onClose={() => {
+          setDialog(null);
+          // Or a reload would open it again.
+          if (initialItem) router.replace("/assortment", { scroll: false });
+        }}
       />
     </div>
   );

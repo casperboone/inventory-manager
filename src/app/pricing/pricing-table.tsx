@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
   AlertTriangleIcon,
@@ -49,14 +50,22 @@ function needsAttention(row: PricingRow) {
 export function PricingTable({
   overview,
   orderCategories,
+  initialItem,
 }: {
   overview: PricingOverview;
   orderCategories: AssortmentCategory[];
+  // From the URL: its dialog starts open, over the list it's in.
+  initialItem: PricingRow | null;
 }) {
   const { rows, categories, reference, years } = overview;
-  const [view, setView] = useState<View>("all");
+  const router = useRouter();
+  const [view, setView] = useState<View>(
+    initialItem?.notForSale ? "notForSale" : "all",
+  );
   const [search, setSearch] = useState("");
-  const [dialog, setDialog] = useState<PricingDialogState | null>(null);
+  const [dialog, setDialog] = useState<PricingDialogState | null>(
+    initialItem && { mode: "edit", itemId: initialItem.id },
+  );
 
   const forSale = rows.filter((row) => !row.notForSale);
   const attentionCount = forSale.filter(needsAttention).length;
@@ -236,7 +245,11 @@ export function PricingTable({
         categories={categories}
         orderCategories={orderCategories}
         priceRounding={overview.settings.priceRounding}
-        onClose={() => setDialog(null)}
+        onClose={() => {
+          setDialog(null);
+          // Or a reload would open it again.
+          if (initialItem) router.replace("/pricing", { scroll: false });
+        }}
       />
     </div>
   );
