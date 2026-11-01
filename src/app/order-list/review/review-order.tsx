@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import type { OrderReview } from "@/lib/assortment/queries";
-import { formatPrice } from "@/lib/format";
+import { formatNumber, formatPrice } from "@/lib/format";
 import { addOrderToSupplierCart, type CartSubmitResult } from "../actions";
 
 export function ReviewOrder({ review }: { review: OrderReview }) {
@@ -99,7 +99,7 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
                   </div>
                 </div>
                 <span className="text-lg font-semibold tabular-nums">
-                  {item.quantityToBuy}
+                  {formatNumber(item.quantityToBuy)}
                 </span>
               </li>
             ))}
@@ -130,7 +130,7 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
           {review.lines.length === 0 && (
             <li className="px-3 py-8 text-center text-sm text-muted-foreground">
               No products with an amount yet.{" "}
-              <Link href="/assortment" className="underline underline-offset-4">
+              <Link href="/order-list" className="underline underline-offset-4">
                 Back to the list
               </Link>
             </li>
@@ -154,7 +154,7 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
               </div>
               <div className="text-right">
                 <div className="text-lg font-semibold tabular-nums">
-                  {line.quantityToBuy}
+                  {formatNumber(line.quantityToBuy)}
                 </div>
                 {line.unitPrice != null && (
                   <div className="text-xs text-muted-foreground tabular-nums">
@@ -246,7 +246,7 @@ function SubmitResult({ result }: { result: CartSubmitResult }) {
               <li key={line.itemNo} className="px-3 py-2 text-sm">
                 <div className="flex items-center gap-2 font-medium">
                   <XCircleIcon className="size-4 text-destructive" />
-                  {line.name} ({line.itemNo}) × {line.quantity}
+                  {line.name} ({line.itemNo}) × {formatNumber(line.quantity)}
                 </div>
                 <div className="pl-6 text-xs text-muted-foreground">
                   {line.error}
@@ -270,7 +270,7 @@ function SubmitResult({ result }: { result: CartSubmitResult }) {
               >
                 <CheckCircle2Icon className="size-4 text-emerald-600" />
                 <span className="flex-1">{line.name}</span>
-                <span className="tabular-nums">× {line.quantity}</span>
+                <span className="tabular-nums">× {formatNumber(line.quantity)}</span>
               </li>
             ))}
           </ul>
@@ -278,7 +278,7 @@ function SubmitResult({ result }: { result: CartSubmitResult }) {
       )}
 
       <div className="flex gap-2">
-        <Button nativeButton={false} render={<Link href="/assortment" />}>
+        <Button nativeButton={false} render={<Link href="/order-list" />}>
           Back to the list
         </Button>
         <Button

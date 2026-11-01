@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { PricingCategory, PricingSettings } from "@/db/schema";
-import { formatPercent, formatPrice } from "@/lib/format";
+import { formatInputNumber, formatPercent, formatPrice } from "@/lib/format";
 import { advicePrice, roundPrice } from "@/lib/pricing/calc";
 import {
   deletePricingCategory,
@@ -44,10 +44,9 @@ const parse = (text: string) => {
   return text.trim() === "" || !Number.isFinite(value) ? null : value;
 };
 // Margins and rates are stored as fractions but typed as percentages.
-const percent = (value: number) => String(Number((value * 100).toFixed(2)));
-// Pivot prices like 1.875 need their third decimal.
-const formatPivot = (value: number) =>
-  `€ ${Number(value.toFixed(3)).toLocaleString("nl-NL", { minimumFractionDigits: 2 })}`;
+const percent = (value: number) => formatInputNumber(value, 100);
+// Pivot prices like 1,875 need their third decimal.
+const formatPivot = (value: number) => formatPrice(value, 3);
 
 export function CategoriesEditor({
   categories,
@@ -240,10 +239,10 @@ function CategoryForm({
 }) {
   const [name, setName] = useState(category?.name ?? "");
   const [baseMargin, setBaseMargin] = useState(
-    category ? percent(category.baseMargin) : "66.6",
+    category ? percent(category.baseMargin) : "66,6",
   );
   const [pivotPrice, setPivotPrice] = useState(
-    category ? String(category.pivotPrice) : "",
+    category ? formatInputNumber(category.pivotPrice) : "",
   );
   const [premiumMargin, setPremiumMargin] = useState(
     category ? percent(category.premiumMargin) : "40",
@@ -477,7 +476,9 @@ function SettingsForm({
   settings: PricingSettings;
   referenceCandidates: { id: number; name: string }[];
 }) {
-  const [rounding, setRounding] = useState(String(settings.priceRounding));
+  const [rounding, setRounding] = useState(
+    formatInputNumber(settings.priceRounding),
+  );
   const [tolerance, setTolerance] = useState(percent(settings.adviceTolerance));
   const [reference, setReference] = useState(
     settings.alcoholReferenceItemId

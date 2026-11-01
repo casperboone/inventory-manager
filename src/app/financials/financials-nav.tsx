@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 const SECTIONS = [
   { href: "/financials/purchase-history", label: "Purchase History" },
   { href: "/financials/invoices", label: "Invoices" },
-  { href: "/financials/orders", label: "Orders" },
+  { href: "/financials/orders", label: "Placed orders" },
   { href: "/financials/outstanding", label: "Outstanding" },
 ];
 

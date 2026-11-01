@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const SECTIONS = [
-  { href: "/pricing", label: "Prices" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/pricing/calculator", label: "Calculator" },
   { href: "/pricing/categories", label: "Categories & settings" },
 ];

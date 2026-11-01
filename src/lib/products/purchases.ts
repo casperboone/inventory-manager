@@ -232,6 +232,66 @@ export async function getQuantitiesByYear(
   return result;
 }
 
+export type LastBought = {
+  date: Date;
+  quantity: number;
+  // Still an open order, so not delivered or invoiced yet.
+  ordered: boolean;
+};
+
+// The latest purchase per product, for the order list. Unlike the totals above
+// this counts open orders: their invoices arrive weeks later, and until then an
+// older date would suggest ordering again. Credit notes, returns (a negative
+// quantity on an invoice) and deposits aren't something we bought. What came in
+// on one day counts as one purchase; if that day has both, the open order wins,
+// as the invoice may not be for the same goods.
+export async function getLastBought(
+  itemNos: string[]
+): Promise<Record<string, LastBought>> {
+  if (itemNos.length === 0) return {};
+  const rows = await db.all<{
+    item_no: string;
+    document_type: "invoice" | "order";
+    document_date: number;
+    quantity: number;
+  }>(sql`
+    select item_no, document_type, document_date, quantity
+    from (
+      select
+        item_no, document_type, document_date,
+        sum(quantity) as quantity,
+        row_number() over (
+          partition by item_no
+          order by
+            document_date desc,
+            case when document_type = 'order' then 0 else 1 end
+        ) as position
+      from supplier_invoice_lines
+      where document_type in ('invoice', 'order')
+        and document_date is not null
+        and quantity > 0
+        and not ${DEPOSIT_MATCH}
+        and item_no in (${sql.join(
+          itemNos.map((itemNo) => sql`${itemNo}`),
+          sql`, `
+        )})
+      group by item_no, document_type, document_date
+    )
+    where position = 1
+  `);
+
+  return Object.fromEntries(
+    rows.map((row) => [
+      row.item_no,
+      {
+        date: new Date(row.document_date * 1000),
+        quantity: row.quantity,
+        ordered: row.document_type === "order",
+      },
+    ])
+  );
+}
+
 export type PurchaseDocumentLine = {
   documentNo: string;
   documentType: "invoice" | "creditmemo";

@@ -26,6 +26,7 @@ export function ImagePicker({
   hasOwnImage,
   supplierItemNo,
   suggestions,
+  searchOnOpen,
   onChanged,
 }: {
   itemId: number;
@@ -33,6 +34,9 @@ export function ImagePicker({
   // Set when the supplier has a photo of its own for this item.
   supplierItemNo: string | null;
   suggestions: string[];
+  // Whether to offer results straight away. Each search can use up paid quota,
+  // so not when the dialog was opened for something else.
+  searchOnOpen: boolean;
   onChanged: () => void;
 }) {
   const [query, setQuery] = useState(suggestions[0] ?? "");
@@ -61,7 +65,9 @@ export function ImagePicker({
 
   // Offer something straight away, but only when there is nothing to show yet.
   useEffect(() => {
-    if (!current && !supplierItemNo && suggestions[0]) runSearch(suggestions[0]);
+    if (searchOnOpen && !current && !supplierItemNo && suggestions[0]) {
+      runSearch(suggestions[0]);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

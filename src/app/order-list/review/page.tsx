@@ -23,7 +23,7 @@ export default async function ReviewOrderPage() {
         size="sm"
         className="-ml-2 mb-2 text-muted-foreground"
         nativeButton={false}
-        render={<Link href="/assortment" />}
+        render={<Link href="/order-list" />}
       >
         <ArrowLeftIcon />
         Back to the list

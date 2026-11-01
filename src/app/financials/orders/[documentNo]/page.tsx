@@ -39,7 +39,7 @@ export default async function OrderPage(
         render={<Link href="/financials/orders" />}
       >
         <ArrowLeftIcon />
-        All orders
+        All placed orders
       </Button>
 
       <div className="flex flex-wrap items-center gap-3">

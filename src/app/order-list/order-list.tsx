@@ -41,23 +41,28 @@ import { OpenItemLink } from "@/components/item-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import type { AssortmentCategory } from "@/db/schema";
 import type {
   AssortmentCategoryWithItems,
   AssortmentRow,
 } from "@/lib/assortment/queries";
-import { formatPrice } from "@/lib/format";
+import {
+  formatInputNumber,
+  formatNumber,
+  formatPrice,
+  formatShortDate,
+} from "@/lib/format";
+import type { LastBought } from "@/lib/products/purchases";
 import { cn } from "@/lib/utils";
 import {
   clearOrderList,
   createNote,
-  deleteAssortmentItem,
+  deleteNote,
   reorderCategories,
   reorderItems,
   setQuantityToBuy,
   updateNote,
 } from "./actions";
-import { ItemDialog, type ItemDialogState } from "./item-dialog";
+import { ItemDialog, type ItemDialogState } from "@/app/items/item-dialog";
 
 const SAVE_DEBOUNCE_MS = 300;
 type View = "all" | "order" | "archived";
@@ -65,12 +70,13 @@ type View = "all" | "order" | "archived";
 export function OrderList({
   categories,
   archived,
-  allCategories,
+  lastBought,
   initialItem,
 }: {
   categories: AssortmentCategoryWithItems[];
   archived: AssortmentCategoryWithItems[];
-  allCategories: AssortmentCategory[];
+  // Per item number.
+  lastBought: Record<string, LastBought>;
   // From the URL: its dialog starts open, over the list it's in.
   initialItem: AssortmentRow | null;
 }) {
@@ -177,7 +183,7 @@ export function OrderList({
 
   function removeRow(item: AssortmentRow) {
     startTransition(async () => {
-      const result = await deleteAssortmentItem(item.id);
+      const result = await deleteNote(item.id);
       if (!result.ok) toast.error(result.error);
     });
   }
@@ -229,13 +235,6 @@ export function OrderList({
   const products = categories.flatMap((category) =>
     category.items.filter((item) => item.kind === "product"),
   );
-  // Always hand the dialog the current row, never the one from when it opened.
-  const dialogItem =
-    dialog?.mode === "edit"
-      ? ([...categories, ...archived]
-          .flatMap((category) => category.items)
-          .find((item) => item.id === dialog.itemId) ?? null)
-      : null;
   const orderLines = products.filter((item) => quantityOf(item) > 0);
   const orderTotal = orderLines.reduce(
     (sum, item) => sum + quantityOf(item) * (item.unitPrice ?? 0),
@@ -294,7 +293,7 @@ export function OrderList({
     <div className="pb-24">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Assortment</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Order list</h1>
           <p className="text-sm text-muted-foreground">
             {products.length} items ·{" "}
             {reordering ? "drag to rearrange" : "tap + for what needs ordering"}
@@ -395,6 +394,9 @@ export function OrderList({
                         <ItemRow
                           key={item.id}
                           item={item}
+                          lastBought={
+                            item.itemNo ? lastBought[item.itemNo] : undefined
+                          }
                           quantity={quantityOf(item)}
                           reordering={reordering}
                           onChange={(value) => changeQuantity(item, value)}
@@ -431,12 +433,10 @@ export function OrderList({
 
       <ItemDialog
         state={dialog}
-        item={dialogItem}
-        categories={allCategories}
         onClose={() => {
           setDialog(null);
           // Or a reload would open it again.
-          if (initialItem) router.replace("/assortment", { scroll: false });
+          if (initialItem) router.replace("/order-list", { scroll: false });
         }}
       />
     </div>
@@ -537,6 +537,7 @@ function RowHandle({
 
 function ItemRow({
   item,
+  lastBought,
   quantity,
   reordering,
   onChange,
@@ -544,6 +545,7 @@ function ItemRow({
   onEdit,
 }: {
   item: AssortmentRow;
+  lastBought: LastBought | undefined;
   quantity: number;
   reordering: boolean;
   onChange: (quantity: number) => void;
@@ -623,6 +625,19 @@ function ItemRow({
                 className="px-1 py-0 text-[10px]"
               />
             )}
+            {lastBought && (
+              <span
+                className={cn(
+                  "max-w-full truncate tabular-nums",
+                  lastBought.ordered &&
+                    "font-medium text-amber-700 dark:text-amber-400",
+                )}
+              >
+                {lastBought.ordered ? "Ordered" : "Bought"}{" "}
+                {formatNumber(lastBought.quantity)} on{" "}
+                {formatShortDate(lastBought.date)}
+              </span>
+            )}
             {!item.supplierProductId && (
               <Badge variant="outline" className="gap-1 text-amber-700">
                 <AlertTriangleIcon className="size-3" />
@@ -643,10 +658,12 @@ function ItemRow({
           <span
             className="w-6 pr-0.5 text-right text-base font-semibold text-muted-foreground tabular-nums sm:w-8 sm:text-lg"
             aria-label={
-              item.target == null ? undefined : `Target ${item.target}`
+              item.target == null
+                  ? undefined
+                  : `Target ${formatNumber(item.target)}`
             }
           >
-            {item.target ?? ""}
+            {formatInputNumber(item.target)}
           </span>
           <Button
             variant="outline"
@@ -659,7 +676,7 @@ function ItemRow({
             <MinusIcon />
           </Button>
           <input
-            value={quantity === 0 ? "" : quantity}
+            value={quantity === 0 ? "" : formatInputNumber(quantity)}
             onChange={(e) => {
               const value = e.target.value.trim().replace(",", ".");
               if (value === "") return onChange(0);
@@ -828,7 +845,7 @@ function OrderSummaryBar({
           <Button
             size="sm"
             nativeButton={false}
-            render={<Link href="/assortment/review" />}
+            render={<Link href="/order-list/review" />}
           >
             Review
             <ArrowRightIcon />

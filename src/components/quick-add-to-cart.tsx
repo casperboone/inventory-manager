@@ -9,7 +9,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { quickAddToCart } from "@/app/products/actions";
+import { quickAddToCart } from "@/app/catalog/actions";
 import { cn } from "@/lib/utils";
 
 // Puts a catalog product straight into the cart at the supplier, without

@@ -2,16 +2,23 @@ import { and, asc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import {
   assortmentCategories,
+  assortmentItemImages,
   assortmentItems,
   supplierProducts,
 } from "@/db/schema";
+import { getCategories } from "@/lib/assortment/queries";
 import { getDiscountStatuses } from "@/lib/products/discounts";
 import {
   getProductPurchaseHistory,
   lastPaidLine,
 } from "@/lib/products/purchases";
 import { getProductPriceChanges } from "@/lib/products/queries";
-import { getPricingItem, getSalePriceHistory } from "@/lib/pricing/queries";
+import {
+  getPricingCategories,
+  getPricingItem,
+  getPricingSettings,
+  getSalePriceHistory,
+} from "@/lib/pricing/queries";
 
 // Where a supplier product leads to in our own assortment. Usually one item,
 // but the same product can be sold as several, like the tap and the OWEE beer.
@@ -96,6 +103,62 @@ export async function getItemName(itemId: number) {
   });
   return item?.name ?? null;
 }
+
+// What the item dialog edits, plus what it shows of the linked product. It finds
+// archived items too; notes have no dialog.
+async function getEditableItem(itemId: number) {
+  const [row] = await db
+    .select({
+      item: assortmentItems,
+      itemNo: supplierProducts.itemNo,
+      supplierDescription: supplierProducts.description,
+      unitOfMeasure: supplierProducts.unitOfMeasure,
+      unitPrice: supplierProducts.unitPrice,
+      imageStatus: supplierProducts.imageStatus,
+      ownImageId: assortmentItemImages.itemId,
+    })
+    .from(assortmentItems)
+    .leftJoin(
+      supplierProducts,
+      eq(assortmentItems.supplierProductId, supplierProducts.id)
+    )
+    .leftJoin(
+      assortmentItemImages,
+      eq(assortmentItemImages.itemId, assortmentItems.id)
+    )
+    .where(
+      and(eq(assortmentItems.id, itemId), eq(assortmentItems.kind, "product"))
+    )
+    .limit(1);
+  if (!row) return null;
+
+  const { item, ownImageId, ...product } = row;
+  return { ...item, ...product, hasOwnImage: ownImageId !== null };
+}
+
+export type EditableItem = NonNullable<
+  Awaited<ReturnType<typeof getEditableItem>>
+>;
+
+export async function getItemDialogData(itemId?: number) {
+  const [item, salePriceHistory, orderCategories, pricingCategories, settings] =
+    await Promise.all([
+      itemId != null ? getEditableItem(itemId) : null,
+      itemId != null ? getSalePriceHistory(itemId) : [],
+      getCategories(),
+      getPricingCategories(),
+      getPricingSettings(),
+    ]);
+  return {
+    item,
+    salePriceHistory,
+    orderCategories,
+    pricingCategories,
+    priceRounding: settings.priceRounding,
+  };
+}
+
+export type ItemDialogData = Awaited<ReturnType<typeof getItemDialogData>>;
 
 // Everything we know about one item: what the order page, the pricing screen,
 // the invoices and the catalog each say about it.

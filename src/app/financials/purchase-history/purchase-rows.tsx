@@ -13,10 +13,6 @@ import {
   type ProductHistoryTarget,
 } from "./product-history-dialog";
 
-const percentFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 1,
-});
-
 // The rows of the product table. Clicking one opens every document the
 // product appears on; what we also sell as an item of our own links to it.
 export function PurchaseRows({
@@ -96,7 +92,7 @@ export function PurchaseRows({
             <TableCell className="text-right">
               {line.discountPercent ? (
                 <span className="text-xs font-medium text-emerald-700 tabular-nums dark:text-emerald-400">
-                  −{percentFormat.format(line.discountPercent)}%
+                  −{formatNumber(line.discountPercent, 1)}%
                 </span>
               ) : (
                 <span className="text-xs text-muted-foreground">—</span>
@@ -115,8 +111,8 @@ export function PurchaseRows({
                         : "text-red-600/80 dark:text-red-400/80",
                     )}
                   >
-                    {percentFormat.format(line.firstDiscountPercent)} →{" "}
-                    {percentFormat.format(line.discountPercent)}%
+                    {formatNumber(line.firstDiscountPercent, 1)} →{" "}
+                    {formatNumber(line.discountPercent, 1)}%
                   </span>
                 )}
             </TableCell>

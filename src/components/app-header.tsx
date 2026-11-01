@@ -6,9 +6,9 @@ import { PackageIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/assortment", label: "Assortment" },
+  { href: "/order-list", label: "Order list" },
   { href: "/pricing", label: "Pricing" },
-  { href: "/products", label: "Catalog" },
+  { href: "/catalog", label: "Catalog" },
   { href: "/financials", label: "Rust Financials" },
   { href: "/imports", label: "Imports" },
 ];

@@ -9,13 +9,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatDate, formatPrice, formatShortDate } from "@/lib/format";
+import {
+  formatDate,
+  formatNumber,
+  formatPrice,
+  formatShortDate,
+} from "@/lib/format";
 import type { PurchaseDocumentLine } from "@/lib/products/purchases";
 import { cn } from "@/lib/utils";
-
-const percentFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 1,
-});
 
 const MONEY_TOLERANCE = 0.005;
 
@@ -106,7 +107,7 @@ export function PurchaseDocumentTable({
                   {line.quantity != null && (
                     <span className="text-muted-foreground sm:hidden">
                       {" "}
-                      · {line.quantity}×
+                      · {formatNumber(line.quantity)}×
                     </span>
                   )}
                 </TableCell>
@@ -124,7 +125,7 @@ export function PurchaseDocumentTable({
                   )}
                 </TableCell>
                 <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                  {line.quantity ?? "—"}
+                  {formatNumber(line.quantity)}
                 </TableCell>
                 <TableCell
                   className={cn(
@@ -155,7 +156,7 @@ export function PurchaseDocumentTable({
                   {discountChange === "up" && "↑ "}
                   {discountChange === "down" && "↓ "}
                   {line.discountPercent
-                    ? `−${percentFormat.format(line.discountPercent)}%`
+                    ? `−${formatNumber(line.discountPercent, 1)}%`
                     : "—"}
                 </TableCell>
                 <TableCell className="text-right font-medium tabular-nums">

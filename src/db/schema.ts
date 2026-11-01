@@ -267,7 +267,8 @@ export const assortmentItems = sqliteTable(
     quantityToBuy: real("quantity_to_buy").notNull().default(0),
     position: integer("position").notNull().default(0),
     note: text("note"),
-    // Pricing, edited on the pricing page only. The calculation lives in
+    // Pricing, edited in the item dialog like everything above, except for the
+    // sale price, which is set in the pricing table. The calculation lives in
     // src/lib/pricing/calc.ts.
     pricingCategoryId: integer("pricing_category_id").references(
       () => pricingCategories.id

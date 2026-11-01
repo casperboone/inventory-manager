@@ -28,7 +28,7 @@ function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default async function ProductsPage(props: PageProps<"/products">) {
+export default async function CatalogPage(props: PageProps<"/catalog">) {
   const params = await props.searchParams;
   const q = first(params.q);
   const unit = first(params.unit);
@@ -84,7 +84,7 @@ export default async function ProductsPage(props: PageProps<"/products">) {
       else next.set(key, String(value));
     }
     const qs = next.toString();
-    return qs ? `/products?${qs}` : "/products";
+    return qs ? `/catalog?${qs}` : "/catalog";
   }
 
   return (

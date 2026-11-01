@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { eq, gt, max } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
-import { z } from "zod";
 import { db } from "@/db";
 import { assortmentCategories, assortmentItems } from "@/db/schema";
 import {
@@ -15,6 +14,7 @@ import {
   addManyToSupplierCart,
   addToSupplierCart,
 } from "@/lib/supplier/cart-service";
+import { revalidateItemScreens } from "@/lib/items/revalidate";
 import { logger } from "@/lib/logger";
 import { deleteItemImage, saveItemImageFromUrl } from "@/lib/images/store";
 import {
@@ -52,116 +52,21 @@ export async function clearOrderList() {
       .update(assortmentItems)
       .set({ quantityToBuy: 0, updatedAt: new Date() })
       .where(gt(assortmentItems.quantityToBuy, 0));
-    revalidatePath("/assortment");
+    revalidatePath("/order-list");
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not clear the list.");
   }
 }
 
-const itemSchema = z.object({
-  id: z.number().int().positive().optional(),
-  name: z.string().trim().min(1, "A name is required."),
-  categoryId: z.number().int().positive().optional(),
-  newCategoryName: z.string().trim().min(1).optional(),
-  target: z.number().min(0).nullable(),
-  supplierProductId: z.number().int().positive().nullable(),
-  note: z.string().trim().max(500).nullable(),
-});
-
-export type ItemInput = z.input<typeof itemSchema>;
-
-export async function saveAssortmentItem(input: ItemInput) {
-  const parsed = itemSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false as const, error: z.prettifyError(parsed.error) };
-  }
-  const { id, name, target, supplierProductId, note, newCategoryName } =
-    parsed.data;
-
-  try {
-    let categoryId = parsed.data.categoryId;
-    if (newCategoryName) {
-      const existing = await db.query.assortmentCategories.findFirst({
-        where: eq(assortmentCategories.name, newCategoryName),
-        columns: { id: true },
-      });
-      if (existing) {
-        categoryId = existing.id;
-      } else {
-        const [{ value }] = await db
-          .select({ value: max(assortmentCategories.position) })
-          .from(assortmentCategories);
-        const [created] = await db
-          .insert(assortmentCategories)
-          .values({ name: newCategoryName, position: (value ?? -1) + 1 })
-          .returning({ id: assortmentCategories.id });
-        categoryId = created.id;
-      }
-    }
-    if (!categoryId) {
-      return { ok: false as const, error: "Choose a category." };
-    }
-
-    if (id) {
-      await db
-        .update(assortmentItems)
-        .set({
-          name,
-          categoryId,
-          target,
-          supplierProductId,
-          note,
-          updatedAt: new Date(),
-        })
-        .where(eq(assortmentItems.id, id));
-    } else {
-      const [{ value }] = await db
-        .select({ value: max(assortmentItems.position) })
-        .from(assortmentItems)
-        .where(eq(assortmentItems.categoryId, categoryId));
-      await db.insert(assortmentItems).values({
-        name,
-        categoryId,
-        target,
-        supplierProductId,
-        note,
-        position: (value ?? -1) + 1,
-      });
-    }
-
-    revalidatePath("/assortment");
-    return { ok: true as const };
-  } catch (error) {
-    return failure(error, "Could not save the item.");
-  }
-}
-
-export async function setItemArchived(itemId: number, archived: boolean) {
-  try {
-    await db
-      .update(assortmentItems)
-      .set({
-        archivedAt: archived ? new Date() : null,
-        // An archived item shouldn't linger on the order list.
-        ...(archived ? { quantityToBuy: 0 } : {}),
-        updatedAt: new Date(),
-      })
-      .where(eq(assortmentItems.id, itemId));
-    revalidatePath("/assortment");
-    return { ok: true as const };
-  } catch (error) {
-    return failure(error, "Could not archive the item.");
-  }
-}
-
-export async function deleteAssortmentItem(itemId: number) {
+// Notes are deleted right from the list, without going through a dialog.
+export async function deleteNote(itemId: number) {
   try {
     await db.delete(assortmentItems).where(eq(assortmentItems.id, itemId));
-    revalidatePath("/assortment");
+    revalidatePath("/order-list");
     return { ok: true as const };
   } catch (error) {
-    return failure(error, "Could not delete the item.");
+    return failure(error, "Could not delete the note.");
   }
 }
 
@@ -189,7 +94,7 @@ export async function deleteEmptyCategory(categoryId: number) {
     await db
       .delete(assortmentCategories)
       .where(eq(assortmentCategories.id, categoryId));
-    revalidatePath("/assortment");
+    revalidatePath("/order-list");
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not delete the category.");
@@ -212,7 +117,7 @@ export async function createNote(categoryId: number, text = "") {
         position: (value ?? -1) + 1,
       })
       .returning({ id: assortmentItems.id });
-    revalidatePath("/assortment");
+    revalidatePath("/order-list");
     return { ok: true as const, id: created.id };
   } catch (error) {
     return failure(error, "Could not add the note.");
@@ -245,7 +150,7 @@ export async function reorderItems(orderedIds: number[]) {
     await db.batch(
       statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
     );
-    revalidatePath("/assortment");
+    revalidatePath("/order-list");
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not save the new order.");
@@ -264,7 +169,7 @@ export async function reorderCategories(orderedIds: number[]) {
     await db.batch(
       statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
     );
-    revalidatePath("/assortment");
+    revalidatePath("/order-list");
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not save the new order.");
@@ -396,8 +301,8 @@ export async function addOrderToSupplierCart(options: {
       notesCleared = removed.length;
     }
 
-    revalidatePath("/assortment");
-    revalidatePath("/assortment/review");
+    revalidatePath("/order-list");
+    revalidatePath("/order-list/review");
     return {
       ok: true as const,
       added,
@@ -432,7 +337,7 @@ export async function setItemImage(
 ) {
   try {
     await saveItemImageFromUrl(itemId, imageUrl, sourceName, fallbackUrl);
-    revalidatePath("/assortment");
+    revalidateItemScreens();
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not save the image.");
@@ -442,7 +347,7 @@ export async function setItemImage(
 export async function removeItemImage(itemId: number) {
   try {
     await deleteItemImage(itemId);
-    revalidatePath("/assortment");
+    revalidateItemScreens();
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not remove the image.");

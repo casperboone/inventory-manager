@@ -13,14 +13,22 @@ npm run dev
 
 Then press **Import products** on http://localhost:3000/imports.
 
-## Assortment and ordering
+Numbers and dates look the same on every screen, Dutch numbers (1.234,5) and
+numeric dates (01-11-2026), because they all go through `src/lib/format.ts`.
 
-`/assortment` is the bar's own list, grouped into categories that double as
+## Order list and ordering
+
+`/order-list` is the bar's own list, grouped into categories that double as
 headings. Walking around the stock, you raise the amount per item with the
 +/− buttons; every change saves on its own and a bar at the bottom shows how
-many items and roughly what it costs. Items are edited by tapping their name:
-name, category, target, an optional note, and the link to a catalog product
-(searchable, with images). Items can be archived and restored.
+many items and roughly what it costs. Items are edited by tapping their name,
+which opens the item dialog (see [The item dialog](#the-item-dialog)).
+
+Each row also says when the item was last bought and how much, from the
+supplier's documents. Open orders count too, labelled "Ordered" in amber: their
+invoices arrive weeks later, and an older date could lead to ordering twice.
+Credit notes, returns and deposits don't count, and an item without a catalog
+link shows nothing.
 
 Each category also takes quick note lines (the note button next to its
 heading) for jotting something down while walking around. "Rearrange" turns
@@ -30,7 +38,7 @@ moving an item to another category happens in its form.
 A target is the desired stock in the supplier's sales unit, shown big next to
 the +/− buttons as a reference while ordering.
 
-"Review" (in the bar at the bottom) opens `/assortment/review`: notes and
+"Review" (in the bar at the bottom) opens `/order-list/review`: notes and
 products without a usable catalog link are listed on top as things to handle
 yourself, followed by everything that goes into the supplier cart. "Add all to
 the supplier cart" sends the whole order in one request
@@ -59,14 +67,30 @@ closed to new customers since 2026, so `GOOGLE_CSE_KEY`/`GOOGLE_CSE_ID` only
 work for accounts that already had access. Repeated searches are cached for
 15 minutes.
 
-Every row in the catalog (`/products`, and the import detail pages) also has a
+Every row in the catalog (`/catalog`, and the import detail pages) also has a
 cart button for a one-off order: pick an amount and it goes straight into the
 supplier cart, without touching the assortment.
+
+## The item dialog
+
+One dialog edits an item, wherever you open it. It has two sections:
+
+- **Item**: name, order category (or a new one), target, the link to a catalog
+  product (searchable, with images), image and note.
+- **Pricing**: pricing category, VAT override, "not for sale", purchase price
+  and where it was bought, contents and alcohol (readable from the supplier's
+  description, like "24/20CL" or "FUST 20LT"), a live preview of the cost and
+  advice, and the sale price history.
+
+The order list opens it at Item, the pricing screen at Pricing, and an item's
+own page has links to both. Archive, restore and delete are in its footer, and
+archived items open from the Archived view on the order list. It loads what it
+needs per item when it opens. The sale price itself is set in the pricing table.
 
 ## Pricing
 
 `/pricing` sets what we charge, on the same assortment items as the order
-page but on its own screen. The model comes from the bar's old
+list. The model comes from the bar's old The model comes from the bar's old
 "Prijsberekening" sheet (`src/lib/pricing/calc.ts`):
 
 - **Cost per portion** = purchase price × (1 + VAT) ÷ (portions × (1 − loss)).
@@ -93,12 +117,9 @@ the advice with how it splits over the two margins, and what your own price
 would earn. Nothing there is saved.
 
 Pricing categories (margins, pivot price, loss, default VAT) and the settings
-live under *Categories & settings*. Each item has a pricing category, a VAT
-override, contents, alcohol percentage and a "not for sale" flag; the dialog
-can read the contents from the supplier's description ("24/20CL", "FUST
-20LT"). Items bought elsewhere (the rotating whisky) are added with *Other
-supplier item*: they get a manual purchase price and also show on the order
-page, where the review lists them to order by hand.
+live under *Categories & settings*. Items bought elsewhere (the rotating
+whisky) are added with *Other supplier item*: they get a manual purchase price
+and also show on the order list, where the review lists them to order by hand.
 
 Rows are flagged when Rust no longer lists the product (without a manual
 price, the cost keeps using its last catalog price), data is missing, the price
@@ -157,7 +178,7 @@ that use the data. (It is also still on the imports page.)
 
 `/financials/invoices` lists the posted invoices and credit notes, searchable
 by document number or by what is on them (searching "fireball" gives every
-invoice that product is on). `/financials/orders` does the same for orders
+invoice that product is on). *Placed orders* (`/financials/orders`) does the same for orders
 that have not been invoiced yet. Both open a document page with all its
 lines, the discount per line, what the discount saved and the total, both
 excluding and including VAT; item numbers link through to the catalog. An

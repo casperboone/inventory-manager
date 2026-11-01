@@ -20,16 +20,18 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { AssortmentCategory, PricingCategory } from "@/db/schema";
-import { formatPercent, formatPrice } from "@/lib/format";
+import type { PricingCategory } from "@/db/schema";
+import {
+  formatInputPrice,
+  formatNumber,
+  formatPercent,
+  formatPrice,
+} from "@/lib/format";
 import type { PricingOverview, PricingRow } from "@/lib/pricing/queries";
 import { priceToneStyle, signalChips } from "@/lib/pricing/signals";
 import { cn } from "@/lib/utils";
 import { setSalePrice } from "./actions";
-import {
-  PricingItemDialog,
-  type PricingDialogState,
-} from "./pricing-item-dialog";
+import { ItemDialog, type ItemDialogState } from "@/app/items/item-dialog";
 
 type View = "all" | "attention" | "notForSale";
 
@@ -48,22 +50,25 @@ function needsAttention(row: PricingRow) {
 
 export function PricingTable({
   overview,
-  orderCategories,
-  initialItem,
+  initialItemId,
 }: {
   overview: PricingOverview;
-  orderCategories: AssortmentCategory[];
-  // From the URL: its dialog starts open, over the list it's in.
-  initialItem: PricingRow | null;
+  // From the URL: its dialog starts open, over the list it's in. An archived
+  // item isn't listed here, but still opens.
+  initialItemId: number | null;
 }) {
   const { rows, categories, reference, years } = overview;
   const router = useRouter();
   const [view, setView] = useState<View>(
-    initialItem?.notForSale ? "notForSale" : "all",
+    rows.find((row) => row.id === initialItemId)?.notForSale
+      ? "notForSale"
+      : "all",
   );
   const [search, setSearch] = useState("");
-  const [dialog, setDialog] = useState<PricingDialogState | null>(
-    initialItem && { mode: "edit", itemId: initialItem.id },
+  const [dialog, setDialog] = useState<ItemDialogState | null>(
+    initialItemId != null
+      ? { mode: "edit", itemId: initialItemId, section: "pricing" }
+      : null,
   );
 
   const forSale = rows.filter((row) => !row.notForSale);
@@ -105,16 +110,11 @@ export function PricingTable({
     [categories],
   );
 
-  const dialogItem =
-    dialog?.mode === "edit"
-      ? (rows.find((row) => row.id === dialog.itemId) ?? null)
-      : null;
-
   return (
     <div className="pb-12">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Prices</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Pricing</h1>
           <p className="max-w-2xl text-sm text-muted-foreground">
             Advice is the cost per portion marked up with the category&apos;s
             base margin up to its pivot price, and with the premium margin above
@@ -122,7 +122,7 @@ export function PricingTable({
             Prices include VAT.
           </p>
         </div>
-        <Button onClick={() => setDialog({ mode: "create" })}>
+        <Button onClick={() => setDialog({ mode: "create", otherSupplier: true })}>
           <PlusIcon />
           Other supplier item
         </Button>
@@ -228,7 +228,13 @@ export function PricingTable({
                       }
                       referenceName={reference?.name}
                       referenceAlcoholPrice={reference?.alcoholPrice ?? null}
-                      onEdit={() => setDialog({ mode: "edit", itemId: row.id })}
+                      onEdit={() =>
+                        setDialog({
+                          mode: "edit",
+                          itemId: row.id,
+                          section: "pricing",
+                        })
+                      }
                     />
                   ))}
                 </tbody>
@@ -238,16 +244,14 @@ export function PricingTable({
         ))}
       </div>
 
-      <PricingItemDialog
+      <ItemDialog
         state={dialog}
-        item={dialogItem}
-        categories={categories}
-        orderCategories={orderCategories}
-        priceRounding={overview.settings.priceRounding}
         onClose={() => {
           setDialog(null);
           // Or a reload would open it again.
-          if (initialItem) router.replace("/pricing", { scroll: false });
+          if (initialItemId != null) {
+            router.replace("/pricing", { scroll: false });
+          }
         }}
       />
     </div>
@@ -321,7 +325,7 @@ function PricingTableRow({
             <p className="hidden truncate text-xs text-muted-foreground sm:block">
               {row.purchaseSource ?? row.supplierDescription ?? "Not at Rust"}
               {row.portions != null &&
-                ` · ${Number(row.portions.toFixed(1))} portions`}
+                ` · ${formatNumber(row.portions, 1)} portions`}
             </p>
             <Signals
               row={row}
@@ -345,7 +349,7 @@ function PricingTableRow({
       <td
         className="px-2 py-2 text-right tabular-nums"
         title={
-          row.advice != null ? `Unrounded ${row.advice.toFixed(3)}` : undefined
+          row.advice != null ? `Unrounded ${formatNumber(row.advice, 3)}` : undefined
         }
       >
         {formatPrice(row.adviceRounded)}
@@ -383,13 +387,6 @@ function PricingTableRow({
   );
 }
 
-const portionFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 0,
-});
-const unitFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 1,
-});
-
 // Portions bought, with the purchase units underneath; just the units when
 // the item doesn't know its portions yet.
 function Bought({
@@ -400,13 +397,13 @@ function Bought({
   unit: string | null;
 }) {
   if (!value) return <span className="text-muted-foreground">—</span>;
-  const units = `${unitFormat.format(value.units)} ${unit?.toLowerCase() ?? "units"}`;
+  const units = `${formatNumber(value.units, 1)} ${unit?.toLowerCase() ?? "units"}`;
   if (value.portions == null) {
     return <span className="text-muted-foreground">{units}</span>;
   }
   return (
     <>
-      {portionFormat.format(value.portions)}
+      {formatNumber(value.portions, 0)}
       <p className="text-xs text-muted-foreground">{units}</p>
     </>
   );
@@ -453,13 +450,10 @@ function Signals({
   );
 }
 
-const display = (value: number | null) =>
-  value == null ? "" : value.toFixed(2).replace(".", ",");
-
 function PriceInput({ row }: { row: PricingRow }) {
   const [draft, setDraft] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-  const value = draft ?? display(row.salePrice);
+  const value = draft ?? formatInputPrice(row.salePrice);
 
   function save(price: number | null) {
     startTransition(async () => {

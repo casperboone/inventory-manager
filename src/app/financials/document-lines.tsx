@@ -9,14 +9,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatPrice } from "@/lib/format";
+import { formatNumber, formatPrice } from "@/lib/format";
 import type { ItemLink } from "@/lib/items/queries";
 import type { DocumentLine, DocumentType } from "@/lib/products/documents";
 import { cn } from "@/lib/utils";
-
-const percentFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 1,
-});
 
 export function DocumentTypeBadge({ type }: { type: DocumentType }) {
   if (type === "creditmemo") {
@@ -67,7 +63,7 @@ export function DocumentLines({
               <TableCell className="hidden font-mono text-xs sm:table-cell">
                 {/* Jumps to the product in the catalog. */}
                 <Link
-                  href={`/products?q=${encodeURIComponent(line.itemNo)}`}
+                  href={`/catalog?q=${encodeURIComponent(line.itemNo)}`}
                   className="hover:underline"
                 >
                   {line.itemNo}
@@ -78,7 +74,7 @@ export function DocumentLines({
                 <ItemLinks items={items.get(line.itemNo)} />
               </TableCell>
               <TableCell className="text-right tabular-nums">
-                {line.quantity ?? "—"}
+                {formatNumber(line.quantity)}
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {formatPrice(line.netUnitPrice ?? line.unitPrice)}
@@ -92,7 +88,7 @@ export function DocumentLines({
                 )}
               >
                 {line.discountPercent
-                  ? `−${percentFormat.format(line.discountPercent)}%`
+                  ? `−${formatNumber(line.discountPercent, 1)}%`
                   : "—"}
               </TableCell>
               <TableCell className="text-right font-medium tabular-nums">

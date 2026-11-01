@@ -11,7 +11,12 @@ import { ItemImage } from "@/components/item-image";
 import { OpenItemLink } from "@/components/item-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate, formatPercent, formatPrice } from "@/lib/format";
+import {
+  formatDate,
+  formatNumber,
+  formatPercent,
+  formatPrice,
+} from "@/lib/format";
 import { getItemDetail, getItemName, type ItemLink } from "@/lib/items/queries";
 import { priceToneStyle, signalChips } from "@/lib/pricing/signals";
 import type { DiscountStatus } from "@/lib/products/discount-types";
@@ -21,10 +26,6 @@ import { SalePriceHistoryList } from "@/app/pricing/sale-price-history";
 
 // Always read the database at request time instead of prerendering at build.
 export const dynamic = "force-dynamic";
-
-const numberFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 1,
-});
 
 function parseId(id: string) {
   return /^\d+$/.test(id) ? Number(id) : null;
@@ -126,10 +127,10 @@ export default async function ItemPage(props: PageProps<"/items/[id]">) {
         size="sm"
         className="-ml-2 text-muted-foreground"
         nativeButton={false}
-        render={<Link href="/assortment" />}
+        render={<Link href="/order-list" />}
       >
         <ArrowLeftIcon />
-        Assortment
+        Order list
       </Button>
 
       <div className="flex items-start gap-3">
@@ -173,16 +174,16 @@ export default async function ItemPage(props: PageProps<"/items/[id]">) {
           <Section
             title="Ordering"
             action={
-              <EditLink href={`/assortment?item=${item.id}`}>Order list</EditLink>
+              <EditLink href={`/order-list?item=${item.id}`}>Order list</EditLink>
             }
           >
             <Facts>
               <Fact label="Target">
-                {item.target != null ? `${item.target} ${unit}` : "—"}
+                {item.target != null ? `${formatNumber(item.target)} ${unit}` : "—"}
               </Fact>
               <Fact label="To buy">
                 {item.quantityToBuy > 0
-                  ? `${item.quantityToBuy} ${unit}`
+                  ? `${formatNumber(item.quantityToBuy)} ${unit}`
                   : "Nothing"}
               </Fact>
               <Fact label="Order category">{orderCategory}</Fact>
@@ -228,10 +229,7 @@ function PricingSection({ detail }: { detail: Detail }) {
     <Section
       title="Pricing"
       action={
-        // The pricing screen only lists active items.
-        <EditLink href={item.archivedAt ? "/pricing" : `/pricing?item=${item.id}`}>
-          Pricing screen
-        </EditLink>
+        <EditLink href={`/pricing?item=${item.id}`}>Pricing screen</EditLink>
       }
     >
       <Facts>
@@ -266,7 +264,7 @@ function PricingSection({ detail }: { detail: Detail }) {
           )}
         </Fact>
         <Fact label="Portions per unit">
-          {row.portions != null ? numberFormat.format(row.portions) : "—"}
+          {formatNumber(row.portions, 1)}
         </Fact>
         <Fact label="VAT">{formatPercent(row.vatRate)}</Fact>
         {row.alcoholPrice != null && (
@@ -364,10 +362,10 @@ function PurchasesSection({ detail, unit }: { detail: Detail; unit: string }) {
               )}
             </Fact>
             <Fact label={`Bought in ${thisYear}`}>
-              {numberFormat.format(bought.thisYear?.units ?? 0)} {unit}
+              {formatNumber(bought.thisYear?.units ?? 0, 1)} {unit}
             </Fact>
             <Fact label={`Bought in ${lastYear}`}>
-              {numberFormat.format(bought.lastYear?.units ?? 0)} {unit}
+              {formatNumber(bought.lastYear?.units ?? 0, 1)} {unit}
             </Fact>
           </Facts>
           {purchases.length === 0 ? (
@@ -422,7 +420,7 @@ function SupplierSection({ detail }: { detail: Detail }) {
         <Muted>
           Not linked to a Rust Food product. Link one in the{" "}
           <Link
-            href={`/assortment?item=${item.id}`}
+            href={`/order-list?item=${item.id}`}
             className="underline underline-offset-2 hover:text-foreground"
           >
             order list
@@ -434,7 +432,7 @@ function SupplierSection({ detail }: { detail: Detail }) {
   }
 
   // Removed products are hidden from the catalog unless you ask for them.
-  const catalogHref = `/products?q=${encodeURIComponent(product.itemNo)}&status=all`;
+  const catalogHref = `/catalog?q=${encodeURIComponent(product.itemNo)}&status=all`;
 
   return (
     <Section

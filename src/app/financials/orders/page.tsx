@@ -2,7 +2,7 @@ import { listDocuments } from "@/lib/products/documents";
 import { DocumentList } from "../document-list";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Orders · Inventory Manager" };
+export const metadata = { title: "Placed orders · Inventory Manager" };
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -22,7 +22,7 @@ export default async function OrdersPage(
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Orders</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">Placed orders</h1>
         <p className="text-sm text-muted-foreground">
           Orders placed but not invoiced yet. They already carry their line
           discounts, and disappear here once their invoice arrives.

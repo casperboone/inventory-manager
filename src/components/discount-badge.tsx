@@ -4,16 +4,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { formatDate, formatPrice } from "@/lib/format";
+import { formatDate, formatNumber, formatPrice } from "@/lib/format";
 import {
   listUnitPrice,
   type DiscountStatus,
 } from "@/lib/products/discount-types";
 import { cn } from "@/lib/utils";
-
-const percentFormat = new Intl.NumberFormat("nl-NL", {
-  maximumFractionDigits: 1,
-});
 
 // Shows whether we get a line discount ("regelkorting") on a product, as last
 // seen on an invoice. Products we never ordered stay unknown.
@@ -77,11 +73,11 @@ export function DiscountBadge({
           )}
           variant="outline"
         >
-          −{percentFormat.format(discount.percent)}%
+          −{formatNumber(discount.percent, 1)}%
         </Badge>
       </TooltipTrigger>
       <TooltipContent className="max-w-64">
-        Line discount of {percentFormat.format(discount.percent)} % (
+        Line discount of {formatNumber(discount.percent, 1)}% (
         {formatPrice(discount.amountPerUnit)} per unit), from{" "}
         {discount.documentType === "order" ? "order" : "invoice"}{" "}
         {discount.documentNo}

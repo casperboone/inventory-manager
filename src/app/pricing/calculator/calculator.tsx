@@ -13,7 +13,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { PricingCategory } from "@/db/schema";
-import { formatPercent, formatPrice } from "@/lib/format";
+import {
+  formatInputNumber,
+  formatInputPrice,
+  formatNumber,
+  formatPercent,
+  formatPrice,
+} from "@/lib/format";
 import {
   advicePrice,
   alcoholPrice,
@@ -33,8 +39,6 @@ const parse = (text: string) => {
   const value = Number(text.trim().replace(",", "."));
   return text.trim() === "" || !Number.isFinite(value) ? null : value;
 };
-const show = (value: number | null, factor = 1) =>
-  value == null ? "" : String(Number((value * factor).toFixed(4)));
 
 // Tries out a price without touching the assortment: what would this cost
 // per portion, what does the model advise, and what does my price earn.
@@ -111,19 +115,21 @@ export function Calculator({
 
   function readDescription() {
     const contents = parsedDescription;
-    if (contents.unitVolume != null) setUnitVolume(show(contents.unitVolume));
+    if (contents.unitVolume != null) {
+      setUnitVolume(formatInputNumber(contents.unitVolume));
+    }
     if (
       contents.packVolume != null &&
       contents.packVolume <= 0.5 &&
       contents.count != null
     ) {
-      setPortionVolume(show(contents.packVolume, 100));
+      setPortionVolume(formatInputNumber(contents.packVolume, 100));
       setPortions("");
     } else if (contents.unitVolume == null && contents.count != null) {
       setPortions(String(contents.count));
     }
     if (contents.alcoholPercentage != null) {
-      setAlcohol(show(contents.alcoholPercentage, 100));
+      setAlcohol(formatInputNumber(contents.alcoholPercentage, 100));
     }
   }
 
@@ -262,7 +268,7 @@ export function Calculator({
                 suffix="L"
                 value={unitVolume}
                 onChange={setUnitVolume}
-                placeholder="4.8"
+                placeholder="4,8"
               />
               <Field
                 id="calc-portion"
@@ -279,7 +285,7 @@ export function Calculator({
                 onChange={setPortions}
                 placeholder={
                   computedPortions != null
-                    ? String(Number(computedPortions.toFixed(2)))
+                    ? formatNumber(computedPortions, 2)
                     : "24"
                 }
               />
@@ -305,7 +311,9 @@ export function Calculator({
             suffix="€"
             value={salePrice}
             onChange={setSalePrice}
-            placeholder={adviceRounded != null ? show(adviceRounded) : "2,00"}
+            placeholder={
+              adviceRounded != null ? formatInputPrice(adviceRounded) : "2,00"
+            }
             className={cn(
               saleTone === "above" &&
                 "border-green-600/30 bg-green-100 dark:bg-green-500/20",
@@ -327,7 +335,7 @@ export function Calculator({
                 </p>
                 <p className="text-xs text-muted-foreground tabular-nums">
                   {advice != null
-                    ? `Unrounded ${advice.toFixed(3)} · ${formatPercent(margin(adviceRounded!, cost!))} margin · ${formatPrice(adviceRounded! - cost!)} profit`
+                    ? `Unrounded ${formatNumber(advice, 3)} · ${formatPercent(margin(adviceRounded!, cost!))} margin · ${formatPrice(adviceRounded! - cost!)} profit`
                     : "Fill in a purchase price and the contents."}
                 </p>
               </div>
@@ -340,7 +348,7 @@ export function Calculator({
                 </Row>
                 <Row label="Sellable portions">
                   {sellable != null
-                    ? `${Number(sellable.toFixed(1))}${category?.wastage ? ` of ${Number(allPortions!.toFixed(1))}` : ""}`
+                    ? `${formatNumber(sellable, 1)}${category?.wastage ? ` of ${formatNumber(allPortions, 1)}` : ""}`
                     : "—"}
                 </Row>
                 <Row label="Cost per portion" strong>

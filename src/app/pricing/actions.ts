@@ -10,7 +10,7 @@ import {
   pricingSettings,
   salePriceChanges,
 } from "@/db/schema";
-import { getPricingOverview, getSalePriceHistory } from "@/lib/pricing/queries";
+import { getPricingOverview } from "@/lib/pricing/queries";
 
 function failure(error: unknown, fallback: string) {
   return {
@@ -58,88 +58,6 @@ export async function setSalePrice(itemId: number, price: number | null) {
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not save the price.");
-  }
-}
-
-const optionalNumber = z.number().min(0).nullable();
-const fraction = z.number().min(0).max(1).nullable();
-
-const itemSchema = z.object({
-  id: z.number().int().positive().optional(),
-  // Only for a new item: what we buy somewhere other than Rust Food.
-  name: z.string().trim().min(1, "A name is required.").optional(),
-  orderCategoryId: z.number().int().positive().optional(),
-  pricingCategoryId: z.number().int().positive().nullable(),
-  notForSale: z.boolean(),
-  unitVolume: optionalNumber,
-  portionVolume: optionalNumber,
-  portionsPerUnit: optionalNumber,
-  alcoholPercentage: fraction,
-  vatRate: fraction,
-  manualPurchasePrice: optionalNumber,
-  purchaseSource: z.string().trim().max(200).nullable(),
-});
-
-export type PricingItemInput = z.input<typeof itemSchema>;
-
-export async function savePricingItem(input: PricingItemInput) {
-  const parsed = itemSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false as const, error: z.prettifyError(parsed.error) };
-  }
-  const { id, name, orderCategoryId, ...fields } = parsed.data;
-  const values = {
-    ...fields,
-    // Zero portions would only ever divide by zero.
-    unitVolume: fields.unitVolume || null,
-    portionVolume: fields.portionVolume || null,
-    portionsPerUnit: fields.portionsPerUnit || null,
-    purchaseSource: fields.purchaseSource || null,
-  };
-
-  try {
-    if (id) {
-      await db
-        .update(assortmentItems)
-        .set({ ...values, updatedAt: new Date() })
-        .where(eq(assortmentItems.id, id));
-      revalidate();
-      return { ok: true as const, id };
-    }
-
-    if (!name || !orderCategoryId) {
-      return {
-        ok: false as const,
-        error: "A new item needs a name and a category.",
-      };
-    }
-    const [{ value }] = await db
-      .select({ value: max(assortmentItems.position) })
-      .from(assortmentItems)
-      .where(eq(assortmentItems.categoryId, orderCategoryId));
-    const [created] = await db
-      .insert(assortmentItems)
-      .values({
-        ...values,
-        name,
-        categoryId: orderCategoryId,
-        position: (value ?? -1) + 1,
-      })
-      .returning({ id: assortmentItems.id });
-    revalidate();
-    // It shows up on the order page too, to order by hand.
-    revalidatePath("/assortment");
-    return { ok: true as const, id: created.id };
-  } catch (error) {
-    return failure(error, "Could not save the item.");
-  }
-}
-
-export async function loadSalePriceHistory(itemId: number) {
-  try {
-    return { ok: true as const, data: await getSalePriceHistory(itemId) };
-  } catch (error) {
-    return failure(error, "Could not load the history.");
   }
 }
 

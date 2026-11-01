@@ -11,6 +11,7 @@ import {
   formatDateTime,
   formatDuration,
   formatNumber,
+  formatPercent,
   formatPrice,
 } from "@/lib/format";
 import { getItemLinksByItemNo } from "@/lib/items/queries";
@@ -187,7 +188,7 @@ function PriceChange({ from, to }: { from: number | null; to: number | null }) {
             )}
           >
             {pct > 0 ? "+" : ""}
-            {pct.toFixed(1)}%
+            {formatPercent(pct / 100, 1)}
           </span>
         )}
       </span>

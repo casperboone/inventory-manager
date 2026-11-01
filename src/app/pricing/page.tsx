@@ -1,4 +1,3 @@
-import { getCategories } from "@/lib/assortment/queries";
 import { parseItemParam } from "@/lib/items/params";
 import { getPricingOverview } from "@/lib/pricing/queries";
 import { PricingTable } from "./pricing-table";
@@ -8,19 +7,9 @@ export const metadata = { title: "Pricing · Inventory Manager" };
 
 export default async function PricingPage(props: PageProps<"/pricing">) {
   const { item } = await props.searchParams;
-  const [overview, orderCategories] = await Promise.all([
-    getPricingOverview(),
-    getCategories(),
-  ]);
-
-  const itemId = parseItemParam(item);
-  const initialItem = overview.rows.find((row) => row.id === itemId) ?? null;
+  const overview = await getPricingOverview();
 
   return (
-    <PricingTable
-      overview={overview}
-      orderCategories={orderCategories}
-      initialItem={initialItem}
-    />
+    <PricingTable overview={overview} initialItemId={parseItemParam(item)} />
   );
 }
