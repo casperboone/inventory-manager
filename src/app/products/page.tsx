@@ -4,8 +4,8 @@ import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon, XIcon } from "lucide-r
 import { ImportButton } from "@/components/import-button";
 import { ProductsTable } from "@/components/products-table";
 import { Button } from "@/components/ui/button";
-import { getListItemsByProduct } from "@/lib/assortment/queries";
 import { formatDateTime, formatNumber } from "@/lib/format";
+import { getItemLinksByItemNo } from "@/lib/items/queries";
 import { getDiscountStatuses } from "@/lib/products/discounts";
 import {
   getLatestSuccessfulImport,
@@ -43,7 +43,7 @@ export default async function ProductsPage(props: PageProps<"/products">) {
   const newInImportId = Number(first(params.new)) || undefined;
 
   const discountFilter = first(params.discount);
-  const [result, units, latestImport, importRunning, listItems] = await Promise.all([
+  const [result, units, latestImport, importRunning, items] = await Promise.all([
     searchProducts({
       q,
       unit,
@@ -61,7 +61,7 @@ export default async function ProductsPage(props: PageProps<"/products">) {
     getUnitsOfMeasure(),
     getLatestSuccessfulImport(),
     isImportRunning(),
-    getListItemsByProduct(),
+    getItemLinksByItemNo(),
   ]);
 
   const discounts = await getDiscountStatuses(
@@ -152,7 +152,7 @@ export default async function ProductsPage(props: PageProps<"/products">) {
       <ProductsTable
         products={result.rows}
         discounts={discounts}
-        listItems={listItems}
+        items={items}
         newImportId={newHighlightImport?.id}
         sorting={{
           sort,

@@ -10,6 +10,7 @@ import {
   Trash2Icon,
 } from "lucide-react";
 import { toast } from "sonner";
+import { OpenItemLink } from "@/components/item-links";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -189,6 +190,7 @@ function ItemForm({
           The name is what you see while ordering. Link a catalog product to
           order it and to show its price.
         </DialogDescription>
+        {item && <OpenItemLink itemId={item.id} />}
       </DialogHeader>
 
       <form onSubmit={onSubmit} className="space-y-4">

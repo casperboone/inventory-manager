@@ -1,4 +1,4 @@
-import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import type { DiscountStatus } from "@/lib/products/discount-types";
 import {
@@ -156,30 +156,6 @@ export async function getCategories() {
     .select()
     .from(assortmentCategories)
     .orderBy(asc(assortmentCategories.position), asc(assortmentCategories.id));
-}
-
-// Our active items per catalog product id. One product can be more than one
-// item, so this holds all of their names.
-export async function getListItemsByProduct() {
-  const rows = await db
-    .select({
-      productId: assortmentItems.supplierProductId,
-      name: assortmentItems.name,
-    })
-    .from(assortmentItems)
-    .where(
-      and(
-        eq(assortmentItems.kind, "product"),
-        isNull(assortmentItems.archivedAt),
-        isNotNull(assortmentItems.supplierProductId),
-      ),
-    );
-
-  const items = new Map<number, string[]>();
-  for (const { productId, name } of rows) {
-    items.set(productId!, [...(items.get(productId!) ?? []), name]);
-  }
-  return items;
 }
 
 // Catalog search for linking an item to a supplier product.

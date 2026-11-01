@@ -155,6 +155,15 @@ export async function getImport(id: number) {
   });
 }
 
+// What the catalog price of one product did over time, newest first.
+export async function getProductPriceChanges(productId: number) {
+  return db
+    .select()
+    .from(supplierPriceChanges)
+    .where(eq(supplierPriceChanges.productId, productId))
+    .orderBy(desc(supplierPriceChanges.id));
+}
+
 export async function getImportChanges(importId: number) {
   const [newProducts, priceChanges, removed] = await Promise.all([
     db

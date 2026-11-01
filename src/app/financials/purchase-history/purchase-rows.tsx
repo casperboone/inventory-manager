@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { ItemLinks } from "@/components/item-links";
 import { Badge } from "@/components/ui/badge";
 import { TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { formatDate, formatNumber, formatPrice } from "@/lib/format";
+import type { ItemLink } from "@/lib/items/queries";
 import type { PurchaseLine } from "@/lib/products/purchases";
 import { cn } from "@/lib/utils";
 import {
@@ -16,13 +18,15 @@ const percentFormat = new Intl.NumberFormat("nl-NL", {
 });
 
 // The rows of the product table. Clicking one opens every document the
-// product appears on.
+// product appears on; what we also sell as an item of our own links to it.
 export function PurchaseRows({
   lines,
   year,
+  items,
 }: {
   lines: PurchaseLine[];
   year: string;
+  items: Map<string, ItemLink[]>;
 }) {
   const [target, setTarget] = useState<ProductHistoryTarget | null>(null);
 
@@ -57,6 +61,10 @@ export function PurchaseRows({
                   credited
                 </Badge>
               )}
+              {/* Following a link shouldn't open the row's dialog as well. */}
+              <span onClick={(event) => event.stopPropagation()}>
+                <ItemLinks items={items.get(line.itemNo)} />
+              </span>
             </TableCell>
             <TableCell className="text-right tabular-nums">
               {formatNumber(Math.round(line.quantity))}

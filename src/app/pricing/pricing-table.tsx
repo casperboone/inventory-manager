@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import {
   AlertTriangleIcon,
   BanknoteIcon,
   ArrowLeftIcon,
+  ArrowUpRightIcon,
   CheckIcon,
   PlusIcon,
   SearchIcon,
@@ -20,11 +22,8 @@ import {
 } from "@/components/ui/tooltip";
 import type { AssortmentCategory, PricingCategory } from "@/db/schema";
 import { formatPercent, formatPrice } from "@/lib/format";
-import type {
-  MissingField,
-  PricingOverview,
-  PricingRow,
-} from "@/lib/pricing/queries";
+import type { PricingOverview, PricingRow } from "@/lib/pricing/queries";
+import { signalChips } from "@/lib/pricing/signals";
 import { cn } from "@/lib/utils";
 import { priceTone } from "@/lib/pricing/calc";
 import { setSalePrice } from "./actions";
@@ -34,13 +33,6 @@ import {
 } from "./pricing-item-dialog";
 
 type View = "all" | "attention" | "notForSale";
-
-const MISSING_LABELS: Record<MissingField, string> = {
-  category: "pricing category",
-  purchasePrice: "purchase price",
-  portions: "portions",
-  salePrice: "sale price",
-};
 
 function needsAttention(row: PricingRow) {
   const { missing, belowAdvice, lowMargin, costChanged, cheapAlcohol } =
@@ -287,6 +279,14 @@ function PricingTableRow({
               >
                 {row.name}
               </button>
+              <Link
+                href={`/items/${row.id}`}
+                title="Open item"
+                aria-label={`Open ${row.name}`}
+                className="-m-1 p-1 text-muted-foreground hover:text-foreground"
+              >
+                <ArrowUpRightIcon className="size-3.5" />
+              </Link>
               {pricingCategory && (
                 <Tooltip>
                   <TooltipTrigger
@@ -410,70 +410,10 @@ function Signals({
   referenceName?: string;
   referenceAlcoholPrice: number | null;
 }) {
-  const { signals } = row;
-  const chips: {
-    key: string;
-    label: string;
-    detail: string;
-    tone: "warn" | "bad";
-  }[] = [];
-
-  if (row.supplierRemoved) {
-    chips.push({
-      key: "removed",
-      label: "Gone from catalog",
-      detail:
-        row.manualPurchasePrice != null
-          ? "Rust no longer lists this product. The cost uses the manual purchase price."
-          : `Rust no longer lists this product. The cost still uses its last catalog price of ${formatPrice(row.catalogPrice)}.`,
-      tone: "bad",
-    });
-  }
-  if (signals.missing.length > 0) {
-    chips.push({
-      key: "missing",
-      label: "Missing data",
-      detail: `No ${signals.missing.map((field) => MISSING_LABELS[field]).join(", ")} yet.`,
-      tone: "warn",
-    });
-  }
-  if (signals.lowMargin) {
-    chips.push({
-      key: "margin",
-      label: "Low margin",
-      detail: "The margin is below the category's premium margin.",
-      tone: "bad",
-    });
-  }
-  if (
-    signals.belowAdvice &&
-    row.salePrice != null &&
-    row.adviceRounded != null
-  ) {
-    chips.push({
-      key: "advice",
-      label: `−${formatPrice(row.adviceRounded - row.salePrice)} vs advice`,
-      detail: `Advice is ${formatPrice(row.adviceRounded)}.`,
-      tone: "warn",
-    });
-  }
-  if (signals.costChanged && row.cost != null && row.salePriceCost != null) {
-    const diff = row.cost - row.salePriceCost;
-    chips.push({
-      key: "cost",
-      label: `Cost ${diff > 0 ? "up" : "down"} ${formatPrice(Math.abs(diff))}`,
-      detail: `A portion cost ${formatPrice(row.salePriceCost)} when the price was set, now ${formatPrice(row.cost)}. Save the price again to accept.`,
-      tone: diff > 0 ? "bad" : "warn",
-    });
-  }
-  if (signals.cheapAlcohol) {
-    chips.push({
-      key: "alcohol",
-      label: "Cheap alcohol",
-      detail: `10 ml of alcohol costs ${formatPrice(row.alcoholPrice)}, less than ${referenceName} (${formatPrice(referenceAlcoholPrice)}).`,
-      tone: "warn",
-    });
-  }
+  const chips = signalChips(row, {
+    name: referenceName,
+    alcoholPrice: referenceAlcoholPrice,
+  });
   if (chips.length === 0) return null;
 
   return (

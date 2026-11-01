@@ -2,17 +2,18 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, XIcon } from "lucide-react";
 import { ImportStatusBadge } from "@/components/import-status-badge";
+import { isOnOurList } from "@/components/item-links";
 import { ProductsTable } from "@/components/products-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getListItemsByProduct } from "@/lib/assortment/queries";
 import {
   formatDateTime,
   formatDuration,
   formatNumber,
   formatPrice,
 } from "@/lib/format";
+import { getItemLinksByItemNo } from "@/lib/items/queries";
 import { getImport, getImportChanges } from "@/lib/products/queries";
 import { cn } from "@/lib/utils";
 
@@ -27,16 +28,16 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
   const run = await getImport(Number(id));
   if (!run) notFound();
 
-  const [changes, listItems] = await Promise.all([
+  const [changes, items] = await Promise.all([
     getImportChanges(run.id),
-    getListItemsByProduct(),
+    getItemLinksByItemNo(),
   ]);
+  const onList = (product: { itemNo: string }) =>
+    isOnOurList(items.get(product.itemNo));
   const ours = {
-    newProducts: changes.newProducts.filter((p) => listItems.has(p.id)),
-    priceChanges: changes.priceChanges.filter((c) =>
-      listItems.has(c.product.id)
-    ),
-    removed: changes.removed.filter((p) => listItems.has(p.id)),
+    newProducts: changes.newProducts.filter(onList),
+    priceChanges: changes.priceChanges.filter((c) => onList(c.product)),
+    removed: changes.removed.filter(onList),
   };
   const { newProducts, priceChanges, removed } = onlyOurs ? ours : changes;
   const oursCount =
@@ -131,7 +132,7 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
         <TabsContent value="new" className="mt-3">
           <ProductsTable
             products={newProducts}
-            listItems={listItems}
+            items={items}
             emptyMessage={
               onlyOurs
                 ? "None of the new products in this import are on our list."
@@ -142,7 +143,7 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
         <TabsContent value="prices" className="mt-3">
           <ProductsTable
             products={priceChanges.map((change) => change.product)}
-            listItems={listItems}
+            items={items}
             emptyMessage={
               onlyOurs
                 ? "None of the price changes in this import are on our list."
@@ -158,7 +159,7 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
         <TabsContent value="removed" className="mt-3">
           <ProductsTable
             products={removed}
-            listItems={listItems}
+            items={items}
             emptyMessage={
               onlyOurs
                 ? "None of the products removed in this import are on our list."

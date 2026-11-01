@@ -27,7 +27,8 @@ import type {
   PricingCategory,
   SalePriceChange,
 } from "@/db/schema";
-import { formatDate, formatPercent, formatPrice } from "@/lib/format";
+import { OpenItemLink } from "@/components/item-links";
+import { formatPercent, formatPrice } from "@/lib/format";
 import {
   advicePrice,
   portionCost,
@@ -37,6 +38,7 @@ import {
 import { parseContents } from "@/lib/pricing/contents";
 import type { PricingRow } from "@/lib/pricing/queries";
 import { loadSalePriceHistory, savePricingItem } from "./actions";
+import { SalePriceHistoryList } from "./sale-price-history";
 
 export type PricingDialogState =
   { mode: "create" } | { mode: "edit"; itemId: number };
@@ -208,6 +210,7 @@ function PricingItemForm({
               "Not linked to a Rust Food product.")
             : "For what we buy somewhere other than Rust Food. It also shows on the order page, to order by hand."}
         </DialogDescription>
+        {item && <OpenItemLink itemId={item.id} />}
       </DialogHeader>
 
       <form onSubmit={onSubmit} className="space-y-4">
@@ -483,24 +486,10 @@ function PriceHistory({ itemId }: { itemId: number }) {
       ) : history.length === 0 ? (
         <p className="text-xs text-muted-foreground">No changes yet.</p>
       ) : (
-        <ul className="max-h-40 divide-y overflow-y-auto rounded-lg border text-xs">
-          {history.map((change) => (
-            <li
-              key={change.id}
-              className="flex items-center justify-between gap-2 px-2.5 py-1.5 tabular-nums"
-            >
-              <span className="text-muted-foreground">
-                {formatDate(change.createdAt)}
-              </span>
-              <span>
-                {formatPrice(change.oldPrice)} → {formatPrice(change.newPrice)}
-              </span>
-              <span className="text-muted-foreground">
-                cost {formatPrice(change.cost)}
-              </span>
-            </li>
-          ))}
-        </ul>
+        <SalePriceHistoryList
+          history={history}
+          className="max-h-40 overflow-y-auto"
+        />
       )}
     </div>
   );

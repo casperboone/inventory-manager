@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatDate, formatNumber, formatPrice } from "@/lib/format";
+import { getItemLinksByItemNo } from "@/lib/items/queries";
 import {
   getPurchaseLines,
   getPurchaseYears,
@@ -77,7 +78,10 @@ export default async function PurchaseHistoryPage(
     : "total";
   const dir = first(params.dir) === "asc" ? "asc" : "desc";
 
-  const years = await getPurchaseYears({ includeDeposits });
+  const [years, items] = await Promise.all([
+    getPurchaseYears({ includeDeposits }),
+    getItemLinksByItemNo(),
+  ]);
   const selectedYear = first(params.year) ?? years[0]?.year;
   const lines = selectedYear
     ? await getPurchaseLines(selectedYear, { includeDeposits, sort, dir })
@@ -311,7 +315,7 @@ export default async function PurchaseHistoryPage(
                   </TableHead>
                 </TableRow>
               </TableHeader>
-              <PurchaseRows lines={lines} year={selected.year} />
+              <PurchaseRows lines={lines} year={selected.year} items={items} />
             </Table>
           </div>
 
