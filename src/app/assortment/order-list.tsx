@@ -575,7 +575,7 @@ function ItemRow({
 
       {/* All of this opens the dialog, except for the arrow after the name. */}
       <div className="relative min-w-0 flex-1">
-        <div className="flex items-start gap-1.5">
+        <div className="flex items-start gap-1">
           <button
             type="button"
             onClick={onEdit}
@@ -585,7 +585,9 @@ function ItemRow({
             <span className="line-clamp-2">{item.name}</span>
           </button>
           {!reordering && (
-            <span className="relative mt-1 flex shrink-0">
+            // The margin lends it some of the row's gap, so names keep their
+            // width on a phone.
+            <span className="relative mt-0.5 -mr-1 flex shrink-0">
               <OpenItemLink itemId={item.id} name={item.name} />
             </span>
           )}

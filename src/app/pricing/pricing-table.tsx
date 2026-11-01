@@ -269,14 +269,21 @@ function PricingTableRow({
           />
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              <button
-                type="button"
-                onClick={onEdit}
-                className="text-left font-medium underline-offset-2 hover:underline"
-              >
-                {row.name}
-              </button>
-              <OpenItemLink itemId={row.id} name={row.name} />
+              {/* Together, so the arrow can't wrap away from the name. */}
+              <span className="flex min-w-0 items-start gap-1">
+                <button
+                  type="button"
+                  onClick={onEdit}
+                  className="min-w-0 text-left font-medium underline-offset-2 hover:underline"
+                >
+                  {row.name}
+                </button>
+                <OpenItemLink
+                  itemId={row.id}
+                  name={row.name}
+                  className="shrink-0"
+                />
+              </span>
               {pricingCategory && (
                 <Tooltip>
                   <TooltipTrigger

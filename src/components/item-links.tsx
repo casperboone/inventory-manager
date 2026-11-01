@@ -3,9 +3,10 @@ import { ArrowUpRightIcon } from "lucide-react";
 import type { ItemLink } from "@/lib/items/queries";
 import { cn } from "@/lib/utils";
 
-// The one way to the item page: an arrow after a name, everywhere. Just the
-// arrow when the item's name is already right there (pass `name`, for screen
-// readers); otherwise with a `label` saying where it leads.
+// The one way to the item page, and the only thing in the app in this colour,
+// so it reads as the same thing on every screen. Just the arrow when the item's
+// name is already right there (pass `name`, for screen readers); otherwise with
+// a `label` saying where it leads.
 export function OpenItemLink({
   itemId,
   label,
@@ -17,41 +18,23 @@ export function OpenItemLink({
   name?: string;
   className?: string;
 }) {
-  const arrow = (
-    <ArrowUpRightIcon
-      className={cn(
-        "inline size-3.5 align-text-bottom text-muted-foreground group-hover/open:text-foreground",
-        label && "ml-0.5",
-      )}
-    />
-  );
-  // Glued to the last word, so a long label can't wrap and leave it behind.
-  const words = label?.split(" ") ?? [];
-  const lastWord = words.pop();
-
   return (
     <Link
       href={`/items/${itemId}`}
       title="Open item"
       aria-label={label ? undefined : `Open ${name}`}
       className={cn(
-        "group/open underline-offset-2 hover:underline",
-        // Just the arrow gets a bigger target, without taking up more room.
-        label ? "font-medium" : "-m-1 inline-flex p-1",
+        "relative inline-flex max-w-full items-center rounded-md border border-blue-600/25 bg-blue-50 align-middle text-blue-700 transition-colors outline-none hover:bg-blue-100 focus-visible:ring-3 focus-visible:ring-blue-600/30 dark:bg-blue-500/15 dark:text-blue-300 dark:hover:bg-blue-500/25",
+        label
+          ? "gap-1 px-1.5 py-0.5 text-xs font-medium"
+          : // A bigger target than it looks, without taking up more room.
+            "size-5 justify-center after:absolute after:-inset-0.5",
         className,
       )}
     >
-      {label ? (
-        <>
-          {words.join(" ")}{" "}
-          <span className="whitespace-nowrap">
-            {lastWord}
-            {arrow}
-          </span>
-        </>
-      ) : (
-        arrow
-      )}
+      {/* A long word may break, rather than widen the table around it. */}
+      {label && <span className="min-w-0 [overflow-wrap:anywhere]">{label}</span>}
+      <ArrowUpRightIcon className="size-3.5 shrink-0" />
     </Link>
   );
 }
@@ -67,7 +50,7 @@ export function ItemLinks({
 }) {
   if (!items?.length) return null;
   return (
-    <span className={cn("mt-0.5 flex flex-wrap gap-x-3 text-xs", className)}>
+    <span className={cn("mt-1 flex flex-wrap gap-1.5", className)}>
       {items.map((item) => (
         <OpenItemLink key={item.id} itemId={item.id} label={item.label} />
       ))}
