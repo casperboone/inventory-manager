@@ -1,4 +1,4 @@
-import { asc, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import type { DiscountStatus } from "@/lib/products/discount-types";
 import {
@@ -158,14 +158,28 @@ export async function getCategories() {
     .orderBy(asc(assortmentCategories.position), asc(assortmentCategories.id));
 }
 
-// Next position in a category, so new items land at the bottom.
-export async function nextItemPosition(categoryId: number) {
-  const last = await db.query.assortmentItems.findFirst({
-    where: eq(assortmentItems.categoryId, categoryId),
-    orderBy: (items, { desc }) => desc(items.position),
-    columns: { position: true },
-  });
-  return (last?.position ?? -1) + 1;
+// Our active items per catalog product id. One product can be more than one
+// item, so this holds all of their names.
+export async function getListItemsByProduct() {
+  const rows = await db
+    .select({
+      productId: assortmentItems.supplierProductId,
+      name: assortmentItems.name,
+    })
+    .from(assortmentItems)
+    .where(
+      and(
+        eq(assortmentItems.kind, "product"),
+        isNull(assortmentItems.archivedAt),
+        isNotNull(assortmentItems.supplierProductId),
+      ),
+    );
+
+  const items = new Map<number, string[]>();
+  for (const { productId, name } of rows) {
+    items.set(productId!, [...(items.get(productId!) ?? []), name]);
+  }
+  return items;
 }
 
 // Catalog search for linking an item to a supplier product.
@@ -185,21 +199,6 @@ export async function searchCatalogForPicker(query: string, limit = 8) {
 export type PickerProduct = Awaited<
   ReturnType<typeof searchCatalogForPicker>
 >[number];
-
-export async function getSupplierProductById(id: number) {
-  const product = await db.query.supplierProducts.findFirst({
-    where: eq(supplierProducts.id, id),
-    columns: {
-      id: true,
-      itemNo: true,
-      description: true,
-      unitOfMeasure: true,
-      unitPrice: true,
-      imageStatus: true,
-    },
-  });
-  return product ?? null;
-}
 
 export type OrderReview = {
   // Lines that can be added to the supplier cart automatically.

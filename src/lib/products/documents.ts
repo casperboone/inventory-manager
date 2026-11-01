@@ -176,17 +176,3 @@ export async function getDocumentSummary() {
     latestInvoice: row?.latest ? new Date(row.latest * 1000) : null,
   };
 }
-
-export async function countDocuments() {
-  const rows = await db
-    .select({
-      documentType: supplierInvoices.documentType,
-      count: sql<number>`count(*)`,
-    })
-    .from(supplierInvoices)
-    .groupBy(supplierInvoices.documentType);
-
-  const counts = { invoice: 0, creditmemo: 0, order: 0 };
-  for (const row of rows) counts[row.documentType] = row.count;
-  return counts;
-}

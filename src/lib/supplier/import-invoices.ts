@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import {
@@ -288,20 +288,4 @@ export async function dropStaleOpenOrders(currentNumbers: string[]) {
     .delete(supplierInvoices)
     .where(inArray(supplierInvoices.documentNo, stale));
   return stale.length;
-}
-
-export async function getLatestInvoiceDate() {
-  const latest = await db
-    .select({ documentDate: supplierInvoices.documentDate })
-    .from(supplierInvoices)
-    .orderBy(desc(supplierInvoices.documentDate))
-    .limit(1);
-  return latest[0]?.documentDate ?? null;
-}
-
-export async function countInvoices() {
-  const rows = await db
-    .select({ documentNo: supplierInvoices.documentNo })
-    .from(supplierInvoices);
-  return rows.length;
 }

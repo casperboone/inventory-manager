@@ -48,6 +48,7 @@ export function ProductsTable({
   newImportId,
   renderPrice,
   discounts,
+  listItems,
   emptyMessage = "No products found.",
 }: {
   products: SupplierProduct[];
@@ -57,6 +58,8 @@ export function ProductsTable({
   renderPrice?: (product: SupplierProduct) => React.ReactNode;
   // Line discount per item number, as last invoiced.
   discounts?: Map<string, DiscountStatus>;
+  // Our own items per product id, for the "On our list" badge.
+  listItems?: Map<number, string[]>;
   emptyMessage?: string;
 }) {
   return (
@@ -118,8 +121,13 @@ export function ProductsTable({
                   {newImportId && product.firstImportId === newImportId && (
                     <Badge>New</Badge>
                   )}
-                  {product.inSupplierAssortment && (
-                    <Badge variant="secondary">Assortment</Badge>
+                  {listItems?.has(product.id) && (
+                    <Badge
+                      variant="secondary"
+                      title={listItems.get(product.id)!.join(", ")}
+                    >
+                      On our list
+                    </Badge>
                   )}
                   {product.removedAt && (
                     <Badge variant="outline">Removed</Badge>
