@@ -1,10 +1,17 @@
 import Link from "next/link";
 import { ImportButton } from "@/components/import-button";
+import { SectionNav } from "@/components/section-tabs";
 import { SyncStatusLine } from "@/components/sync-status-line";
 import { formatPrice } from "@/lib/format";
 import { getOpenEntries } from "@/lib/products/open-entries";
 import { getSyncStatus } from "@/lib/products/queries";
-import { FinancialsNav } from "./financials-nav";
+
+const SECTIONS = [
+  { href: "/financials/purchase-history", label: "Purchase History" },
+  { href: "/financials/invoices", label: "Invoices" },
+  { href: "/financials/orders", label: "Placed orders" },
+  { href: "/financials/outstanding", label: "Outstanding" },
+];
 
 // Everything that comes from Rust Food's own bookkeeping sits behind one nav
 // entry, since it is a secondary feature next to ordering.
@@ -21,7 +28,7 @@ export default async function FinancialsLayout({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <FinancialsNav />
+        <SectionNav sections={SECTIONS} match="prefix" />
         <div className="flex flex-wrap items-center gap-3">
           <SyncStatusLine status={status} className="text-xs" />
           {/* Something past its due date is worth seeing without clicking. */}

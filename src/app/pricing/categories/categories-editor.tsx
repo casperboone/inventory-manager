@@ -23,6 +23,7 @@ import {
 } from "@/components/ui/select";
 import type { PricingCategory, PricingSettings } from "@/db/schema";
 import { formatInputNumber, formatPercent, formatPrice } from "@/lib/format";
+import { parseTypedNumber } from "@/lib/numbers";
 import { advicePrice, roundPrice } from "@/lib/pricing/calc";
 import {
   deletePricingCategory,
@@ -39,10 +40,6 @@ const NONE = "none";
 // What a few typical portion costs come to, to see what the numbers do.
 const SAMPLE_COSTS = [0.25, 0.5, 1, 2];
 
-const parse = (text: string) => {
-  const value = Number(text.trim().replace(",", "."));
-  return text.trim() === "" || !Number.isFinite(value) ? null : value;
-};
 // Margins and rates are stored as fractions but typed as percentages.
 const percent = (value: number) => formatInputNumber(value, 100);
 // Pivot prices like 1,875 need their third decimal.
@@ -257,11 +254,11 @@ function CategoryForm({
   const [pending, startTransition] = useTransition();
 
   const values = {
-    baseMargin: parse(baseMargin),
-    pivotPrice: parse(pivotPrice),
-    premiumMargin: parse(premiumMargin),
-    wastage: parse(wastage),
-    vatRate: parse(vatRate),
+    baseMargin: parseTypedNumber(baseMargin),
+    pivotPrice: parseTypedNumber(pivotPrice),
+    premiumMargin: parseTypedNumber(premiumMargin),
+    wastage: parseTypedNumber(wastage),
+    vatRate: parseTypedNumber(vatRate),
   };
   const complete = Object.values(values).every((value) => value != null);
   const preview =
@@ -489,8 +486,8 @@ function SettingsForm({
 
   function onSubmit(event: React.FormEvent) {
     event.preventDefault();
-    const priceRounding = parse(rounding);
-    const adviceTolerance = parse(tolerance);
+    const priceRounding = parseTypedNumber(rounding);
+    const adviceTolerance = parseTypedNumber(tolerance);
     if (priceRounding == null || adviceTolerance == null) {
       toast.error("Fill in every number.");
       return;

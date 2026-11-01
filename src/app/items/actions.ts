@@ -1,11 +1,12 @@
 "use server";
 
-import { eq, max } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
 import { assortmentCategories, assortmentItems } from "@/db/schema";
 import { getItemDialogData } from "@/lib/items/queries";
 import { revalidateItemScreens } from "@/lib/items/revalidate";
+import { nextCategoryPosition, nextItemPosition } from "@/lib/positions";
 
 function failure(error: unknown, fallback: string) {
   return {
@@ -77,12 +78,12 @@ export async function saveItem(input: ItemInput) {
       if (existing) {
         categoryId = existing.id;
       } else {
-        const [{ value }] = await db
-          .select({ value: max(assortmentCategories.position) })
-          .from(assortmentCategories);
         const [created] = await db
           .insert(assortmentCategories)
-          .values({ name: newCategoryName, position: (value ?? -1) + 1 })
+          .values({
+            name: newCategoryName,
+            position: await nextCategoryPosition(assortmentCategories),
+          })
           .returning({ id: assortmentCategories.id });
         categoryId = created.id;
       }
@@ -97,14 +98,10 @@ export async function saveItem(input: ItemInput) {
         .set({ ...values, categoryId, updatedAt: new Date() })
         .where(eq(assortmentItems.id, id));
     } else {
-      const [{ value }] = await db
-        .select({ value: max(assortmentItems.position) })
-        .from(assortmentItems)
-        .where(eq(assortmentItems.categoryId, categoryId));
       await db.insert(assortmentItems).values({
         ...values,
         categoryId,
-        position: (value ?? -1) + 1,
+        position: await nextItemPosition(categoryId),
       });
     }
 

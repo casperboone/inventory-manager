@@ -20,6 +20,7 @@ import {
   formatPercent,
   formatPrice,
 } from "@/lib/format";
+import { parseTypedNumber } from "@/lib/numbers";
 import {
   advicePrice,
   alcoholPrice,
@@ -35,10 +36,6 @@ import { cn } from "@/lib/utils";
 const DEFAULT_VAT = "default";
 const VAT_RATES = [0, 0.09, 0.21];
 
-const parse = (text: string) => {
-  const value = Number(text.trim().replace(",", "."));
-  return text.trim() === "" || !Number.isFinite(value) ? null : value;
-};
 
 // Tries out a price without touching the assortment: what would this cost
 // per portion, what does the model advise, and what does my price earn.
@@ -68,13 +65,13 @@ export function Calculator({
     parsedDescription.count != null ||
     parsedDescription.alcoholPercentage != null;
 
-  const portionLiters = parse(portionVolume);
-  const alcoholPercent = parse(alcohol);
+  const portionLiters = parseTypedNumber(portionVolume);
+  const alcoholPercent = parseTypedNumber(alcohol);
   const input = {
-    purchasePrice: parse(purchasePrice),
-    unitVolume: parse(unitVolume),
+    purchasePrice: parseTypedNumber(purchasePrice),
+    unitVolume: parseTypedNumber(unitVolume),
     portionVolume: portionLiters != null ? portionLiters / 100 : null,
-    portionsPerUnit: parse(portions),
+    portionsPerUnit: parseTypedNumber(portions),
     vatRate: vat === DEFAULT_VAT ? null : Number(vat),
     alcoholPercentage: alcoholPercent != null ? alcoholPercent / 100 : null,
   };
@@ -97,7 +94,7 @@ export function Calculator({
       ? { costPart: (atBase - category.pivotPrice) * (1 - category.baseMargin) }
       : null;
 
-  const sale = parse(salePrice);
+  const sale = parseTypedNumber(salePrice);
   const saleMargin = sale && cost != null ? margin(sale, cost) : null;
   const saleTone = priceTone(sale, advice);
   const saleAlcohol =

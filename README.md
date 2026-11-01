@@ -16,6 +16,9 @@ Then press **Import products** on http://localhost:3000/imports.
 Numbers and dates look the same on every screen, Dutch numbers (1.234,5) and
 numeric dates (01-11-2026), because they all go through `src/lib/format.ts`.
 
+`npm test` runs the unit tests. They cover pure calculations and can't reach
+the database.
+
 ## Order list and ordering
 
 `/order-list` is the bar's own list, grouped into categories that double as
@@ -134,6 +137,24 @@ write). It matches rows to items by article number within the same heading,
 then by name, skips ARCHIEF, prefers the alcohol percentage from the
 supplier's description, and refuses to run once pricing categories exist.
 
+## Item page
+
+`/items/[id]` shows everything we know about one item on a single read-only
+page, including archived items. Any screen that shows one of our items links to
+it. It has four sections:
+
+- **Ordering**: target, what is on the list to buy, the order category and the
+  note.
+- **Pricing**: the sale price with its cost, advice and margin, the same flags
+  as the pricing table, and the history of price changes.
+- **Supplier**: catalog price, line discount and how the catalog price moved,
+  with a warning when Rust no longer lists the product.
+- **Purchases**: what a unit last cost us, plus every document the product
+  appears on.
+
+Changes happen on the order page and the pricing screen; the links in each
+section's header lead there.
+
 ## Line discounts (regelkorting)
 
 The supplier shows the line discount nowhere before ordering: the catalog JSON
@@ -154,7 +175,7 @@ drops out of the open list and its rows are removed, leaving the invoice as
 the authority.
 
 The discount shown per product is the one on its most recent line, whether
-that is an open order or an invoice.
+that is an open order or an invoice. Credit notes don't count.
 Products we never ordered stay "unknown". Note that the catalog price is the
 price *after* this discount: comparing recent invoices with the catalog, the
 catalog matches the net price and never the gross. The discount therefore says

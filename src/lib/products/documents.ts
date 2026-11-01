@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, like, or, sql, type SQL } from "drizzle-orm";
 import { db } from "@/db";
 import { supplierInvoiceLines, supplierInvoices } from "@/db/schema";
+import { netUnitPrice } from "./net-unit-price";
 
 // Browsing what the supplier sent us: posted invoices, credit notes and the
 // orders that have not been invoiced yet.
@@ -126,10 +127,7 @@ export async function getDocument(documentNo: string) {
     description: row.description,
     quantity: row.quantity,
     unitPrice: row.unitPrice,
-    netUnitPrice:
-      row.quantity && row.quantity !== 0 && row.amount != null
-        ? row.amount / row.quantity
-        : null,
+    netUnitPrice: netUnitPrice(row.quantity, row.amount),
     discountPercent: row.discountPercent,
     amount: row.amount,
   }));

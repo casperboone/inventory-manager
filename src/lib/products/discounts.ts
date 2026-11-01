@@ -7,24 +7,22 @@ export { listUnitPrice } from "./discount-types";
 
 type Row = {
   item_no: string;
-  discount_percent: number | null;
+  discount_percent: number;
   unit_price: number | null;
   document_date: number | null;
   document_no: string;
   document_type: "invoice" | "order";
 };
 
-// The most recent invoice line per product, which is the discount currently
-// in force as far as we can tell.
-export async function getDiscountStatuses(
-  itemNos: string[]
-): Promise<Map<string, DiscountStatus>> {
-  const statuses = new Map<string, DiscountStatus>();
-  if (itemNos.length === 0) return statuses;
-
-  const rows = await db.all<Row>(sql`
-    select item_no, discount_percent, unit_price, document_date, document_no,
-           document_type
+// The most recent line per product, which is the discount currently in force
+// as far as we can tell. A credit note says nothing about that, and a line
+// without a percentage counts as no discount. Everything that shows or filters
+// on the current discount reads it from here, so they can't disagree.
+export function latestDiscountLines(itemNos?: string[]) {
+  const itemFilter = itemNos ? sql`and item_no in ${itemNos}` : sql``;
+  return sql`(
+    select item_no, coalesce(discount_percent, 0) as discount_percent,
+           unit_price, document_date, document_no, document_type
     from (
       select
         item_no, discount_percent, unit_price, document_date, document_no,
@@ -33,16 +31,28 @@ export async function getDiscountStatuses(
           partition by item_no order by document_date desc, id desc
         ) as rn
       from supplier_invoice_lines
-      where item_no in ${itemNos}
+      where document_type in ('invoice', 'order')
+        ${itemFilter}
     )
     where rn = 1
-  `);
+  )`;
+}
+
+export async function getDiscountStatuses(
+  itemNos: string[]
+): Promise<Map<string, DiscountStatus>> {
+  const statuses = new Map<string, DiscountStatus>();
+  if (itemNos.length === 0) return statuses;
+
+  const rows = await db.all<Row>(
+    sql`select * from ${latestDiscountLines(itemNos)}`
+  );
 
   for (const row of rows) {
     const invoicedAt = row.document_date
       ? new Date(row.document_date * 1000)
       : null;
-    const percent = row.discount_percent ?? 0;
+    const percent = row.discount_percent;
 
     statuses.set(
       row.item_no,

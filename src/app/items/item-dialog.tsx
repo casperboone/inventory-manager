@@ -47,6 +47,7 @@ import {
   portionsPerUnit,
   roundPrice,
 } from "@/lib/pricing/calc";
+import { parseTypedNumber } from "@/lib/numbers";
 import { parseContents } from "@/lib/pricing/contents";
 import { ImagePicker } from "@/app/order-list/image-picker";
 import { ProductPicker } from "@/app/order-list/product-picker";
@@ -74,12 +75,8 @@ export type ItemDialogState =
     }
   | { mode: "edit"; itemId: number; section?: "item" | "pricing" };
 
-// Form values are typed text; these turn them back into numbers.
-const parse = (text: string) => {
-  const value = Number(text.trim().replace(",", "."));
-  return text.trim() === "" || !Number.isFinite(value) ? null : value;
-};
-const isNumber = (text: string) => text.trim() === "" || parse(text) !== null;
+const isNumber = (text: string) =>
+  text.trim() === "" || parseTypedNumber(text) !== null;
 
 // What a field saves as. One left alone keeps exactly what is stored: the form
 // shows it rounded, and changing an item's name shouldn't change its cost.
@@ -91,7 +88,7 @@ function fieldValue(
   if (stored != null && text === formatInputNumber(stored, factor)) {
     return stored;
   }
-  const value = parse(text);
+  const value = parseTypedNumber(text);
   return value != null ? value / factor : null;
 }
 
@@ -255,13 +252,13 @@ function ItemForm({
   const pricingCategory = pricingCategories.find(
     (candidate) => String(candidate.id) === pricingCategoryId,
   );
-  const portionVolumeCl = parse(portionVolume);
-  const alcoholPercent = parse(alcohol);
+  const portionVolumeCl = parseTypedNumber(portionVolume);
+  const alcoholPercent = parseTypedNumber(alcohol);
   const input = {
-    purchasePrice: parse(manualPrice) ?? catalogPrice,
-    unitVolume: parse(unitVolume),
+    purchasePrice: parseTypedNumber(manualPrice) ?? catalogPrice,
+    unitVolume: parseTypedNumber(unitVolume),
     portionVolume: portionVolumeCl != null ? portionVolumeCl / 100 : null,
-    portionsPerUnit: parse(portions),
+    portionsPerUnit: parseTypedNumber(portions),
     vatRate: vat === DEFAULT_VAT ? null : Number(vat),
     alcoholPercentage: alcoholPercent != null ? alcoholPercent / 100 : null,
   };

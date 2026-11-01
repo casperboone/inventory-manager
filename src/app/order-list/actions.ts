@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, gt, max } from "drizzle-orm";
+import { eq, gt } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import { assortmentCategories, assortmentItems } from "@/db/schema";
@@ -17,6 +17,7 @@ import {
 import { revalidateItemScreens } from "@/lib/items/revalidate";
 import { logger } from "@/lib/logger";
 import { deleteItemImage, saveItemImageFromUrl } from "@/lib/images/store";
+import { nextItemPosition } from "@/lib/positions";
 import {
   searchProductImages,
   type ImageCandidate,
@@ -104,17 +105,13 @@ export async function deleteEmptyCategory(categoryId: number) {
 // Quick note lines: created empty and typed straight into the list.
 export async function createNote(categoryId: number, text = "") {
   try {
-    const [{ value }] = await db
-      .select({ value: max(assortmentItems.position) })
-      .from(assortmentItems)
-      .where(eq(assortmentItems.categoryId, categoryId));
     const [created] = await db
       .insert(assortmentItems)
       .values({
         categoryId,
         kind: "note",
         name: text,
-        position: (value ?? -1) + 1,
+        position: await nextItemPosition(categoryId),
       })
       .returning({ id: assortmentItems.id });
     revalidatePath("/order-list");

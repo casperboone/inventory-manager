@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ImageOffIcon } from "lucide-react";
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card";
-import { cn } from "@/lib/utils";
+import { ImageWithPreview, NoImage } from "@/components/image-with-preview";
 
 export function productImageUrl(itemNo: string, variant?: "thumb") {
   const url = `/api/product-images/${encodeURIComponent(itemNo)}`;
@@ -75,53 +69,17 @@ export function ProductImage({
       setMissing(true);
     }
   }
-  const frame = cn(
-    "flex shrink-0 items-center justify-center overflow-hidden rounded-md border bg-white",
-    className
-  );
 
-  if (missing) {
-    return (
-      <div className={frame} style={{ width: size, height: size }}>
-        <ImageOffIcon className="size-4 text-muted-foreground/50" />
-      </div>
-    );
-  }
+  if (missing) return <NoImage size={size} className={className} />;
 
   return (
-    <HoverCard>
-      <HoverCardTrigger
-        delay={150}
-        closeDelay={0}
-        render={<div className={frame} style={{ width: size, height: size }} />}
-      >
-        {/* A plain lazy <img>: thumbnails are pre-sized on the server, so
-            nothing is resized per request and loading never blocks the page. */}
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          key={attempt}
-          src={`${productImageUrl(itemNo, "thumb")}${attempt > 0 ? `&try=${attempt}` : ""}`}
-          alt={alt}
-          width={size}
-          height={size}
-          loading="lazy"
-          decoding="async"
-          className="size-full object-contain"
-          onError={() => void checkAgain(0)}
-        />
-      </HoverCardTrigger>
-      <HoverCardContent side="right" align="start" className="w-auto bg-white p-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={productImageUrl(itemNo)}
-          alt={alt}
-          width={256}
-          height={256}
-          loading="lazy"
-          decoding="async"
-          className="size-64 object-contain"
-        />
-      </HoverCardContent>
-    </HoverCard>
+    <ImageWithPreview
+      src={`${productImageUrl(itemNo, "thumb")}${attempt > 0 ? `&try=${attempt}` : ""}`}
+      previewSrc={productImageUrl(itemNo)}
+      alt={alt}
+      size={size}
+      className={className}
+      onError={() => void checkAgain(0)}
+    />
   );
 }

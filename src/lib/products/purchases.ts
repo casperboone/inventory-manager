@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "@/db";
+import { NET_UNIT_PRICE_SQL, netUnitPrice } from "./net-unit-price";
 
 // What we bought per year, from the invoices and credit notes we imported.
 // Credit notes count against the total, open orders are left out because they
@@ -137,7 +138,7 @@ export async function getPurchaseLines(
         unit_price, discount_percent, ${SIGN} as sign,
         -- What a unit actually cost on this line, so the range matches the
         -- average rather than quoting the price before the discount.
-        case when quantity > 0 then amount / quantity end as net_unit_price,
+        ${NET_UNIT_PRICE_SQL} as net_unit_price,
         row_number() over (
           partition by item_no
           order by
@@ -339,10 +340,7 @@ export async function getProductPurchaseHistory(
     documentDate: toDate(row.document_date),
     quantity: row.quantity,
     unitPrice: row.unit_price,
-    netUnitPrice:
-      row.quantity && row.quantity > 0 && row.amount != null
-        ? row.amount / row.quantity
-        : null,
+    netUnitPrice: netUnitPrice(row.quantity, row.amount),
     discountPercent: row.discount_percent,
     amount: row.amount,
   }));
