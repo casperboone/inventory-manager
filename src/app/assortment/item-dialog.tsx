@@ -283,7 +283,7 @@ function ItemForm({
             />
             <p className="text-xs text-muted-foreground">
               {supplierHasImage
-                ? "An image of our own replaces the supplier's photo everywhere."
+                ? "An image of our own replaces the supplier's photo on the order and pricing pages; the catalog keeps the supplier's."
                 : "The supplier has no photo for this item, so pick one here."}{" "}
               It is stored with the item.
             </p>

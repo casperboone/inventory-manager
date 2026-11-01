@@ -46,6 +46,7 @@ function needsAttention(row: PricingRow) {
   const { missing, belowAdvice, lowMargin, costChanged, cheapAlcohol } =
     row.signals;
   return (
+    row.supplierRemoved ||
     missing.length > 0 ||
     belowAdvice ||
     lowMargin ||
@@ -417,6 +418,17 @@ function Signals({
     tone: "warn" | "bad";
   }[] = [];
 
+  if (row.supplierRemoved) {
+    chips.push({
+      key: "removed",
+      label: "Gone from catalog",
+      detail:
+        row.manualPurchasePrice != null
+          ? "Rust no longer lists this product. The cost uses the manual purchase price."
+          : `Rust no longer lists this product. The cost still uses its last catalog price of ${formatPrice(row.catalogPrice)}.`,
+      tone: "bad",
+    });
+  }
   if (signals.missing.length > 0) {
     chips.push({
       key: "missing",
