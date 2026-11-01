@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { DiscountBadge } from "@/components/discount-badge";
 import { ItemImage } from "@/components/item-image";
+import { OpenItemLink } from "@/components/item-links";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatPercent, formatPrice } from "@/lib/format";
@@ -102,12 +103,7 @@ function ItemList({ items }: { items: ItemLink[] }) {
   return items.map((item, index) => (
     <span key={item.id}>
       {index > 0 && ", "}
-      <Link
-        href={`/items/${item.id}`}
-        className="font-medium underline underline-offset-2"
-      >
-        {item.label}
-      </Link>
+      <OpenItemLink itemId={item.id} label={item.label} />
     </span>
   ));
 }

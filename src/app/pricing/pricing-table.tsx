@@ -1,18 +1,17 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import Link from "next/link";
 import {
   AlertTriangleIcon,
   BanknoteIcon,
   ArrowLeftIcon,
-  ArrowUpRightIcon,
   CheckIcon,
   PlusIcon,
   SearchIcon,
 } from "lucide-react";
 import { toast } from "sonner";
 import { ItemImage } from "@/components/item-image";
+import { OpenItemLink } from "@/components/item-links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -277,14 +276,7 @@ function PricingTableRow({
               >
                 {row.name}
               </button>
-              <Link
-                href={`/items/${row.id}`}
-                title="Open item"
-                aria-label={`Open ${row.name}`}
-                className="-m-1 p-1 text-muted-foreground hover:text-foreground"
-              >
-                <ArrowUpRightIcon className="size-3.5" />
-              </Link>
+              <OpenItemLink itemId={row.id} name={row.name} />
               {pricingCategory && (
                 <Tooltip>
                   <TooltipTrigger

@@ -190,7 +190,9 @@ function ItemForm({
           The name is what you see while ordering. Link a catalog product to
           order it and to show its price.
         </DialogDescription>
-        {item && <OpenItemLink itemId={item.id} />}
+        {item && (
+          <OpenItemLink itemId={item.id} label="Open item" className="w-fit" />
+        )}
       </DialogHeader>
 
       <form onSubmit={onSubmit} className="space-y-4">
