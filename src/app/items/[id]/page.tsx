@@ -207,8 +207,8 @@ export default async function ItemPage(props: PageProps<"/items/[id]">) {
         </div>
 
         <div className="space-y-4">
-          <PurchasesSection detail={detail} unit={unit} />
           <SupplierSection detail={detail} />
+          <PurchasesSection detail={detail} unit={unit} />
         </div>
       </div>
     </div>
