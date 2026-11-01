@@ -35,7 +35,6 @@ export type ProductFilters = {
   q?: string;
   unit?: string;
   status?: ProductStatus;
-  assortment?: boolean;
   // Only products first seen in this import.
   newInImportId?: number;
   // Filter on the line discount we last saw on an invoice.
@@ -91,7 +90,6 @@ export async function searchProducts(filters: ProductFilters) {
     filters.unit ? eq(supplierProducts.unitOfMeasure, filters.unit) : undefined,
     status === "active" ? isNull(supplierProducts.removedAt) : undefined,
     status === "removed" ? isNotNull(supplierProducts.removedAt) : undefined,
-    filters.assortment ? eq(supplierProducts.inSupplierAssortment, true) : undefined,
     filters.newInImportId
       ? eq(supplierProducts.firstImportId, filters.newInImportId)
       : undefined,

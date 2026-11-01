@@ -1,4 +1,5 @@
 import { formatPrice } from "@/lib/format";
+import { priceTone } from "./calc";
 import type { MissingField, PricingRow } from "./queries";
 
 const MISSING_LABELS: Record<MissingField, string> = {
@@ -80,4 +81,25 @@ export function signalChips(
     });
   }
   return chips;
+}
+
+// How a sale price compares to the unrounded advice, for showing it coloured.
+export function priceToneStyle(
+  salePrice: number | null,
+  advice: number | null,
+) {
+  const tone = priceTone(salePrice, advice);
+  if (tone === "above") {
+    return {
+      title: "Above the advice",
+      className: "border-green-600/30 bg-green-100 dark:bg-green-500/20",
+    };
+  }
+  if (tone === "below") {
+    return {
+      title: "Below the advice",
+      className: "border-red-600/30 bg-red-100 dark:bg-red-500/20",
+    };
+  }
+  return null;
 }

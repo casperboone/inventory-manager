@@ -25,6 +25,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   AlertTriangleIcon,
   ArrowRightIcon,
+  ArrowUpRightIcon,
   CheckIcon,
   GripVerticalIcon,
   MinusIcon,
@@ -578,13 +579,30 @@ function ItemRow({
         />
       )}
 
-      <ItemImage
-        itemId={item.id}
-        itemNo={item.itemNo}
-        hasOwnImage={item.hasOwnImage}
-        imageStatus={item.imageStatus}
-        alt={item.supplierDescription ?? item.name}
-      />
+      <div className="relative shrink-0">
+        <ItemImage
+          itemId={item.id}
+          itemNo={item.itemNo}
+          hasOwnImage={item.hasOwnImage}
+          imageStatus={item.imageStatus}
+          alt={item.supplierDescription ?? item.name}
+        />
+        {/* On the image's corner, because a phone has no width to spare in
+            this row. Beside the image rather than around it: its hover preview
+            would otherwise count as part of the link. */}
+        {!reordering && (
+          <Link
+            href={`/items/${item.id}`}
+            title="Open item"
+            aria-label={`Open ${item.name}`}
+            className="absolute -right-2 -bottom-2 flex size-7 items-center justify-center text-muted-foreground hover:text-foreground"
+          >
+            <span className="rounded-full border bg-background p-0.5">
+              <ArrowUpRightIcon className="size-2.5" />
+            </span>
+          </Link>
+        )}
+      </div>
 
       <button
         type="button"

@@ -24,9 +24,8 @@ import {
 import type { AssortmentCategory, PricingCategory } from "@/db/schema";
 import { formatPercent, formatPrice } from "@/lib/format";
 import type { PricingOverview, PricingRow } from "@/lib/pricing/queries";
-import { signalChips } from "@/lib/pricing/signals";
+import { priceToneStyle, signalChips } from "@/lib/pricing/signals";
 import { cn } from "@/lib/utils";
-import { priceTone } from "@/lib/pricing/calc";
 import { setSalePrice } from "./actions";
 import {
   PricingItemDialog,
@@ -489,7 +488,7 @@ function PriceInput({ row }: { row: PricingRow }) {
     else save(price);
   }
 
-  const tone = priceTone(row.salePrice, row.advice);
+  const tone = priceToneStyle(row.salePrice, row.advice);
 
   const canUseAdvice =
     row.adviceRounded != null &&
@@ -512,19 +511,8 @@ function PriceInput({ row }: { row: PricingRow }) {
         placeholder="—"
         aria-label={`Price of ${row.name}`}
         disabled={pending}
-        title={
-          tone === "above"
-            ? "Above the advice"
-            : tone === "below"
-              ? "Below the advice"
-              : undefined
-        }
-        className={cn(
-          "h-7 w-16 px-1.5 text-right tabular-nums",
-          tone === "above" &&
-            "border-green-600/30 bg-green-100 dark:bg-green-500/20",
-          tone === "below" && "border-red-600/30 bg-red-100 dark:bg-red-500/20",
-        )}
+        title={tone?.title}
+        className={cn("h-7 w-16 px-1.5 text-right tabular-nums", tone?.className)}
       />
       {canUseAdvice && (
         <Button
