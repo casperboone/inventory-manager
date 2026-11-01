@@ -133,6 +133,22 @@ async function requestJson(
   return JSON.parse(text);
 }
 
+// The open lists replace what we have with whatever comes back, so an answer
+// that isn't the list we asked for has to fail rather than read as "empty".
+function listRows(body: unknown, path: string): unknown[] {
+  const rows = (body as { data?: unknown } | null)?.data;
+  if (!Array.isArray(rows)) {
+    throw new Error(`Expected a list from ${path} but got something else.`);
+  }
+  return rows;
+}
+
+function requireReadableRows(rows: unknown[], read: unknown[], path: string) {
+  if (rows.length > 0 && read.length === 0) {
+    throw new Error(`Could not read any of the rows from ${path}.`);
+  }
+}
+
 export type PostedKind = "PostedInvoices" | "PostedCreditMemos";
 
 function pageFor(kind: PostedKind) {
@@ -255,12 +271,13 @@ export async function fetchOpenOrders(): Promise<InvoiceHeader[]> {
   payload.set("search[value]", "");
   payload.set("search[regex]", "false");
 
-  const body = (await requestJson("/Document/GetOpenOrders", {
-    body: payload,
-    page: ORDERS_PAGE,
-  })) as { data?: unknown[] };
+  const path = "/Document/GetOpenOrders";
+  const rows = listRows(
+    await requestJson(path, { body: payload, page: ORDERS_PAGE }),
+    path
+  );
 
-  return (body.data ?? []).flatMap((row) => {
+  const orders = rows.flatMap((row) => {
     const parsed = openOrderRowSchema.safeParse(row);
     if (!parsed.success) return [];
     return [
@@ -280,17 +297,20 @@ export async function fetchOpenOrders(): Promise<InvoiceHeader[]> {
       },
     ];
   });
+  requireReadableRows(rows, orders, path);
+  return orders;
 }
 
 export async function fetchOrderLines(
   documentNo: string
 ): Promise<InvoiceLine[]> {
-  const body = (await requestJson(
-    `/Document/GetOrderDetails/${encodeURIComponent(documentNo)}`,
-    { page: ORDERS_PAGE }
-  )) as unknown[];
+  const path = `/Document/GetOrderDetails/${encodeURIComponent(documentNo)}`;
+  const body = await requestJson(path, { page: ORDERS_PAGE });
+  if (!Array.isArray(body)) {
+    throw new Error(`Expected a list from ${path} but got something else.`);
+  }
 
-  return (Array.isArray(body) ? body : []).flatMap((row) => {
+  return body.flatMap((row) => {
     const parsed = invoiceLineSchema.safeParse(row);
     if (!parsed.success || !parsed.data.No) return [];
     return [
@@ -361,12 +381,13 @@ export async function fetchOpenEntries(): Promise<OpenEntry[]> {
   payload.set("search[value]", "");
   payload.set("search[regex]", "false");
 
-  const body = (await requestJson("/Document/GetOpenEntries", {
-    body: payload,
-    page: OPEN_ENTRIES_PAGE,
-  })) as { data?: unknown[] };
+  const path = "/Document/GetOpenEntries";
+  const rows = listRows(
+    await requestJson(path, { body: payload, page: OPEN_ENTRIES_PAGE }),
+    path
+  );
 
-  return (body.data ?? []).flatMap((row) => {
+  const entries = rows.flatMap((row) => {
     const parsed = openEntryRowSchema.safeParse(row);
     if (!parsed.success) return [];
     const data = parsed.data;
@@ -388,6 +409,8 @@ export async function fetchOpenEntries(): Promise<OpenEntry[]> {
       },
     ];
   });
+  requireReadableRows(rows, entries, path);
+  return entries;
 }
 
 // The supplier's own PDF of a posted document. Orders have none: the portal

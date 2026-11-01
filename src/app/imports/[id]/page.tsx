@@ -1,13 +1,23 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeftIcon, XIcon } from "lucide-react";
+import { DocumentTypeBadge } from "@/app/financials/document-lines";
 import { ImportStatusBadge } from "@/components/import-status-badge";
 import { isOnOurList } from "@/components/item-links";
 import { ProductsTable } from "@/components/products-table";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  formatDate,
   formatDateTime,
   formatDuration,
   formatNumber,
@@ -15,7 +25,13 @@ import {
   formatPrice,
 } from "@/lib/format";
 import { getItemLinksByItemNo } from "@/lib/items/queries";
-import { getImport, getImportChanges } from "@/lib/products/queries";
+import {
+  getImport,
+  getImportChanges,
+  getImportDocuments,
+} from "@/lib/products/queries";
+import { IMPORT_KIND_LABELS } from "@/lib/supplier/import-runs";
+import type { SupplierImport } from "@/db/schema";
 import { cn } from "@/lib/utils";
 
 export async function generateMetadata(props: PageProps<"/imports/[id]">) {
@@ -29,6 +45,143 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
   const run = await getImport(Number(id));
   if (!run) notFound();
 
+  return (
+    <div className="space-y-5">
+      <Link
+        href="/imports"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeftIcon className="size-4" />
+        All imports
+      </Link>
+
+      <div className="flex flex-wrap items-center gap-3">
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {IMPORT_KIND_LABELS[run.kind]} import #{run.id}
+        </h1>
+        <ImportStatusBadge run={run} />
+        <span className="text-sm text-muted-foreground">
+          {formatDateTime(run.startedAt)} ·{" "}
+          {formatDuration(run.startedAt, run.finishedAt)}
+        </span>
+      </div>
+
+      {run.error && (
+        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+          {run.error}
+        </p>
+      )}
+
+      {run.kind === "documents" ? (
+        <DocumentRun run={run} />
+      ) : (
+        <CatalogRun run={run} onlyOurs={onlyOurs} />
+      )}
+    </div>
+  );
+}
+
+function RunStats({
+  stats,
+}: {
+  stats: { label: string; value: number | null }[];
+}) {
+  return (
+    <div className="grid grid-cols-[repeat(auto-fit,minmax(9rem,1fr))] gap-3">
+      {stats.map((stat) => (
+        <Card key={stat.label} size="sm">
+          <CardHeader>
+            <CardTitle className="text-xs font-normal text-muted-foreground">
+              {stat.label}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="text-2xl font-semibold tabular-nums">
+            {formatNumber(stat.value)}
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+async function DocumentRun({ run }: { run: SupplierImport }) {
+  const documents = await getImportDocuments(run);
+
+  return (
+    <>
+      <RunStats
+        stats={[
+          { label: "Invoices read", value: run.invoicesCount },
+          { label: "Credit notes read", value: run.creditMemosCount },
+          { label: "Lines", value: run.linesCount },
+          { label: "Still to read", value: run.remainingCount },
+          { label: "Open orders refreshed", value: run.openOrdersCount },
+          { label: "Outstanding refreshed", value: run.openEntriesCount },
+        ]}
+      />
+
+      <div className="overflow-hidden rounded-lg border bg-background">
+        <Table>
+          <TableHeader>
+            <TableRow className="bg-muted/50 hover:bg-muted/50">
+              <TableHead className="w-28">Date</TableHead>
+              <TableHead>Number</TableHead>
+              <TableHead className="hidden w-32 sm:table-cell">Type</TableHead>
+              <TableHead className="hidden w-20 text-right sm:table-cell">
+                Lines
+              </TableHead>
+              <TableHead className="w-28 text-right">Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {documents.length === 0 && (
+              <TableRow>
+                <TableCell
+                  colSpan={5}
+                  className="h-24 text-center text-sm text-muted-foreground"
+                >
+                  No new invoices or credit notes in this import.
+                </TableCell>
+              </TableRow>
+            )}
+            {documents.map((document) => (
+              <TableRow key={document.documentNo} className="relative">
+                <TableCell className="whitespace-nowrap">
+                  <Link
+                    href={`/financials/invoices/${encodeURIComponent(document.documentNo)}`}
+                    className="after:absolute after:inset-0"
+                  >
+                    {formatDate(document.documentDate)}
+                  </Link>
+                </TableCell>
+                <TableCell className="font-mono text-xs">
+                  {document.documentNo}
+                </TableCell>
+                <TableCell className="hidden sm:table-cell">
+                  <DocumentTypeBadge type={document.documentType} />
+                </TableCell>
+                <TableCell className="hidden text-right text-muted-foreground tabular-nums sm:table-cell">
+                  {formatNumber(document.lineCount)}
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  {formatPrice(document.amount)}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+}
+
+async function CatalogRun({
+  run,
+  onlyOurs,
+}: {
+  run: SupplierImport;
+  onlyOurs: boolean;
+}) {
   const [changes, items] = await Promise.all([
     getImportChanges(run.id),
     getItemLinksByItemNo(),
@@ -60,46 +213,8 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
   ];
 
   return (
-    <div className="space-y-5">
-      <Link
-        href="/imports"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-      >
-        <ArrowLeftIcon className="size-4" />
-        All imports
-      </Link>
-
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Import #{run.id}
-        </h1>
-        <ImportStatusBadge run={run} />
-        <span className="text-sm text-muted-foreground">
-          {formatDateTime(run.startedAt)} ·{" "}
-          {formatDuration(run.startedAt, run.finishedAt)}
-        </span>
-      </div>
-
-      {run.error && (
-        <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
-          {run.error}
-        </p>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {stats.map((stat) => (
-          <Card key={stat.label} size="sm">
-            <CardHeader>
-              <CardTitle className="text-xs font-normal text-muted-foreground">
-                {stat.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-2xl font-semibold tabular-nums">
-              {formatNumber(stat.value)}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+    <>
+      <RunStats stats={stats} />
 
       <Tabs defaultValue="new">
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -169,7 +284,7 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
           />
         </TabsContent>
       </Tabs>
-    </div>
+    </>
   );
 }
 

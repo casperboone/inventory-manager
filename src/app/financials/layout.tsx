@@ -1,8 +1,9 @@
 import Link from "next/link";
-import { InvoiceImportButton } from "@/components/invoice-import-button";
-import { formatDate, formatNumber, formatPrice } from "@/lib/format";
-import { getDocumentSummary } from "@/lib/products/documents";
+import { ImportButton } from "@/components/import-button";
+import { SyncStatusLine } from "@/components/sync-status-line";
+import { formatPrice } from "@/lib/format";
 import { getOpenEntries } from "@/lib/products/open-entries";
+import { getSyncStatus } from "@/lib/products/queries";
 import { FinancialsNav } from "./financials-nav";
 
 // Everything that comes from Rust Food's own bookkeeping sits behind one nav
@@ -12,8 +13,8 @@ export default async function FinancialsLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [summary, open] = await Promise.all([
-    getDocumentSummary(),
+  const [status, open] = await Promise.all([
+    getSyncStatus("documents"),
     getOpenEntries(),
   ]);
 
@@ -22,14 +23,7 @@ export default async function FinancialsLayout({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <FinancialsNav />
         <div className="flex flex-wrap items-center gap-3">
-          {/* Says at a glance how far the imported data runs. */}
-          <p className="text-xs text-muted-foreground">
-            {formatNumber(summary.invoices)} invoices
-            {summary.creditMemos > 0 &&
-              ` · ${formatNumber(summary.creditMemos)} credit notes`}
-            {summary.latestInvoice &&
-              ` · last ${formatDate(summary.latestInvoice)}`}
-          </p>
+          <SyncStatusLine status={status} className="text-xs" />
           {/* Something past its due date is worth seeing without clicking. */}
           {open.overdue > 0 && (
             <Link
@@ -39,7 +33,7 @@ export default async function FinancialsLayout({
               {formatPrice(open.overdue)} overdue
             </Link>
           )}
-          <InvoiceImportButton />
+          <ImportButton kind="documents" running={status.running} />
         </div>
       </div>
       {children}

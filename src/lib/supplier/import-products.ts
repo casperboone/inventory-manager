@@ -1,19 +1,14 @@
-import { and, eq, isNull, lt, ne, or } from "drizzle-orm";
+import { and, eq, isNull, ne, or } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
-import {
-  supplierImports,
-  supplierPriceChanges,
-  supplierProducts,
-} from "@/db/schema";
+import { supplierPriceChanges, supplierProducts } from "@/db/schema";
 import { logger } from "@/lib/logger";
 import { AuthService } from "./auth-service";
 import { CatalogService } from "./catalog-service";
 import { parseCatalogRow, type CatalogProduct } from "./catalog-row";
 import { HttpClient } from "./http-client";
+import { failImportRun, finishImportRun, startImportRun } from "./import-runs";
 
-// An import still "running" after this long is assumed to have crashed.
-const STALE_IMPORT_MS = 15 * 60 * 1000;
 const PAUSE_BETWEEN_PAGES_MS = 500;
 
 type ImportOptions = {
@@ -34,27 +29,7 @@ export async function importSupplierProducts(
   const pageSize = options.pageSize ?? envNumber("SUPPLIER_PAGE_SIZE") ?? 1000;
   const limit = options.limit ?? envNumber("SUPPLIER_IMPORT_LIMIT");
 
-  await db
-    .update(supplierImports)
-    .set({ status: "failed", error: "Timed out", finishedAt: new Date() })
-    .where(
-      and(
-        eq(supplierImports.status, "running"),
-        lt(supplierImports.startedAt, new Date(Date.now() - STALE_IMPORT_MS))
-      )
-    );
-
-  const running = await db.query.supplierImports.findFirst({
-    where: eq(supplierImports.status, "running"),
-  });
-  if (running) {
-    throw new Error("An import is already running.");
-  }
-
-  const [run] = await db
-    .insert(supplierImports)
-    .values({ startedAt: new Date() })
-    .returning({ id: supplierImports.id });
+  const run = await startImportRun("catalog");
 
   try {
     const { products, reportedCount } = await fetchCatalog(pageSize, limit);
@@ -67,28 +42,18 @@ export async function importSupplierProducts(
 
     const stats = await applyCatalog(run.id, products, complete);
 
-    await db
-      .update(supplierImports)
-      .set({
-        status: "succeeded",
-        finishedAt: new Date(),
-        reportedCount,
-        fetchedCount: products.length,
-        ...stats,
-      })
-      .where(eq(supplierImports.id, run.id));
+    await finishImportRun(run.id, {
+      reportedCount,
+      fetchedCount: products.length,
+      ...stats,
+    });
 
     logger.info(
       `Import #${run.id} succeeded: ${stats.newCount} new, ${stats.updatedCount} updated, ${stats.priceChangedCount} price changes, ${stats.removedCount} removed.`
     );
     return run.id;
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    logger.error(`Import #${run.id} failed: ${message}`);
-    await db
-      .update(supplierImports)
-      .set({ status: "failed", finishedAt: new Date(), error: message })
-      .where(eq(supplierImports.id, run.id));
+    await failImportRun(run.id, error);
     throw error;
   }
 }

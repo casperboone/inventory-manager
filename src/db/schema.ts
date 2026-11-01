@@ -15,19 +15,34 @@ const createdAt = () =>
 
 export const supplierImports = sqliteTable("supplier_imports", {
   id: integer("id").primaryKey({ autoIncrement: true }),
+  // What this run imported: the product catalog, or the documents (invoices,
+  // credit notes, open orders and the outstanding list).
+  kind: text("kind", { enum: ["catalog", "documents"] })
+    .notNull()
+    .default("catalog"),
   status: text("status", { enum: ["running", "succeeded", "failed"] })
     .notNull()
     .default("running"),
   startedAt: integer("started_at", { mode: "timestamp" }).notNull(),
   finishedAt: integer("finished_at", { mode: "timestamp" }),
   error: text("error"),
-  // Number of products the supplier reported vs. what we actually received.
+  // Catalog runs. Number of products the supplier reported vs. what we
+  // actually received.
   reportedCount: integer("reported_count"),
   fetchedCount: integer("fetched_count"),
   newCount: integer("new_count"),
   updatedCount: integer("updated_count"),
   priceChangedCount: integer("price_changed_count"),
   removedCount: integer("removed_count"),
+  // Document runs. Documents are stored one by one, so a failed run still says
+  // how far it got.
+  invoicesCount: integer("invoices_count"),
+  creditMemosCount: integer("credit_memos_count"),
+  linesCount: integer("lines_count"),
+  // Posted documents left for the next run; a run reads a batch at a time.
+  remainingCount: integer("remaining_count"),
+  openOrdersCount: integer("open_orders_count"),
+  openEntriesCount: integer("open_entries_count"),
 });
 
 export const supplierProducts = sqliteTable(

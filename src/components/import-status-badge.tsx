@@ -5,18 +5,36 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import type { SupplierImport } from "@/db/schema";
+import { formatNumber } from "@/lib/format";
+import { isRunActive } from "@/lib/supplier/import-runs";
 
 export function ImportStatusBadge({ run }: { run: SupplierImport }) {
-  if (run.status === "running") {
+  if (isRunActive(run)) {
     return <Badge variant="secondary">Running</Badge>;
   }
-  if (run.status === "failed") {
+  // Still "running" but past its time: it crashed and no later run has come
+  // along yet to say so.
+  if (run.status !== "succeeded") {
     return (
       <Tooltip>
         <TooltipTrigger render={<span />}>
           <Badge variant="destructive">Failed</Badge>
         </TooltipTrigger>
-        <TooltipContent>{run.error ?? "Unknown error"}</TooltipContent>
+        <TooltipContent>
+          {run.error ?? (run.status === "running" ? "Timed out" : "Unknown error")}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  if (run.remainingCount) {
+    return (
+      <Tooltip>
+        <TooltipTrigger render={<span />}>
+          <Badge variant="outline">Partial</Badge>
+        </TooltipTrigger>
+        <TooltipContent>
+          {formatNumber(run.remainingCount)} documents left for the next run
+        </TooltipContent>
       </Tooltip>
     );
   }

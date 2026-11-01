@@ -14,7 +14,8 @@ export async function runSupplierImport(): Promise<ImportResult> {
     revalidatePath("/", "layout");
     return { ok: true, importId };
   } catch (error) {
-    revalidatePath("/imports");
+    // The failed run shows in the status on every page that has one.
+    revalidatePath("/", "layout");
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Import failed.",
@@ -50,6 +51,7 @@ export async function runInvoiceImport(): Promise<InvoiceImportActionResult> {
       openEntries: result.openEntries,
     };
   } catch (error) {
+    revalidatePath("/", "layout");
     return {
       ok: false,
       error: error instanceof Error ? error.message : "Import failed.",

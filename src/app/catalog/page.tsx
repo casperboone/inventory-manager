@@ -3,14 +3,14 @@ import Link from "next/link";
 import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon, XIcon } from "lucide-react";
 import { ImportButton } from "@/components/import-button";
 import { ProductsTable } from "@/components/products-table";
+import { SyncStatusLine } from "@/components/sync-status-line";
 import { Button } from "@/components/ui/button";
-import { formatDateTime, formatNumber } from "@/lib/format";
+import { formatNumber } from "@/lib/format";
 import { getItemLinksByItemNo } from "@/lib/items/queries";
 import { getDiscountStatuses } from "@/lib/products/discounts";
 import {
-  getLatestSuccessfulImport,
+  getSyncStatus,
   getUnitsOfMeasure,
-  isImportRunning,
   searchProducts,
   SORTS,
   type ProductSort,
@@ -43,7 +43,7 @@ export default async function CatalogPage(props: PageProps<"/catalog">) {
   const newInImportId = Number(first(params.new)) || undefined;
 
   const discountFilter = first(params.discount);
-  const [result, units, latestImport, importRunning, items] = await Promise.all([
+  const [result, units, sync, items] = await Promise.all([
     searchProducts({
       q,
       unit,
@@ -58,14 +58,15 @@ export default async function CatalogPage(props: PageProps<"/catalog">) {
       page,
     }),
     getUnitsOfMeasure(),
-    getLatestSuccessfulImport(),
-    isImportRunning(),
+    getSyncStatus("catalog"),
     getItemLinksByItemNo(),
   ]);
 
   const discounts = await getDiscountStatuses(
     result.rows.map((product) => product.itemNo)
   );
+
+  const latestImport = sync.lastSuccess;
 
   // In an initial import every product is new, so there is nothing to highlight.
   const newHighlightImport =
@@ -94,14 +95,9 @@ export default async function CatalogPage(props: PageProps<"/catalog">) {
           <h1 className="text-2xl font-semibold tracking-tight">
             Supplier catalog
           </h1>
-          <p className="text-sm text-muted-foreground">
-            Rust Food
-            {latestImport
-              ? ` · last imported ${formatDateTime(latestImport.finishedAt)}`
-              : " · not imported yet"}
-          </p>
+          <SyncStatusLine status={sync} />
         </div>
-        <ImportButton running={importRunning} />
+        <ImportButton kind="catalog" running={sync.running} />
       </div>
 
       {newHighlightImport && !newInImportId && (

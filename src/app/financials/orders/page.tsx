@@ -2,6 +2,10 @@ import { listDocuments } from "@/lib/products/documents";
 import { DocumentList } from "../document-list";
 
 export const dynamic = "force-dynamic";
+
+// The layout's invoice import runs as a server action from this page, and
+// maxDuration applies per page, so it gets the platform maximum here too.
+export const maxDuration = 60;
 export const metadata = { title: "Placed orders · Inventory Manager" };
 
 function first(value: string | string[] | undefined) {

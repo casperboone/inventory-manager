@@ -4,9 +4,12 @@ import {
   count,
   desc,
   eq,
+  gte,
+  inArray,
   isNotNull,
   isNull,
   like,
+  lte,
   or,
   sql,
   type SQL,
@@ -14,9 +17,12 @@ import {
 import { db } from "@/db";
 import {
   supplierImports,
+  supplierInvoices,
   supplierPriceChanges,
   supplierProducts,
+  type SupplierImport,
 } from "@/db/schema";
+import { isRunActive, type ImportKind } from "@/lib/supplier/import-runs";
 
 export const PAGE_SIZE = 50;
 
@@ -124,19 +130,35 @@ export async function getUnitsOfMeasure() {
   return rows.flatMap((r) => (r.unit ? [r.unit] : []));
 }
 
-export async function getLatestSuccessfulImport() {
-  return db.query.supplierImports.findFirst({
-    where: eq(supplierImports.status, "succeeded"),
-    orderBy: desc(supplierImports.id),
-  });
-}
+export type SyncStatus = {
+  kind: ImportKind;
+  // Whether a run is in progress right now. A run that crashed never says so,
+  // which is why this is not just its status.
+  running: boolean;
+  latest: SupplierImport | undefined;
+  lastSuccess: SupplierImport | undefined;
+};
 
-export async function isImportRunning() {
-  const running = await db.query.supplierImports.findFirst({
-    where: eq(supplierImports.status, "running"),
-    columns: { id: true },
-  });
-  return !!running;
+export async function getSyncStatus(kind: ImportKind): Promise<SyncStatus> {
+  const [latest, lastSuccess] = await Promise.all([
+    db.query.supplierImports.findFirst({
+      where: eq(supplierImports.kind, kind),
+      orderBy: desc(supplierImports.id),
+    }),
+    db.query.supplierImports.findFirst({
+      where: and(
+        eq(supplierImports.kind, kind),
+        eq(supplierImports.status, "succeeded")
+      ),
+      orderBy: desc(supplierImports.id),
+    }),
+  ]);
+  return {
+    kind,
+    running: latest ? isRunActive(latest) : false,
+    latest,
+    lastSuccess,
+  };
 }
 
 export async function getImports(limit = 50) {
@@ -151,6 +173,27 @@ export async function getImport(id: number) {
   return db.query.supplierImports.findFirst({
     where: eq(supplierImports.id, id),
   });
+}
+
+// The invoices and credit notes a document run read. The run's window is enough
+// to find them, since only one document run goes at a time.
+export async function getImportDocuments(run: SupplierImport) {
+  return db
+    .select()
+    .from(supplierInvoices)
+    .where(
+      and(
+        inArray(supplierInvoices.documentType, ["invoice", "creditmemo"]),
+        gte(supplierInvoices.importedAt, run.startedAt),
+        run.finishedAt
+          ? lte(supplierInvoices.importedAt, run.finishedAt)
+          : undefined
+      )
+    )
+    .orderBy(
+      desc(supplierInvoices.documentDate),
+      desc(supplierInvoices.documentNo)
+    );
 }
 
 // What the catalog price of one product did over time, newest first.
