@@ -15,7 +15,8 @@
     "supplier:images": "tsx scripts/warm-images.ts",
     "assortment:import": "tsx scripts/import-assortment.ts",
     "images:compact": "tsx scripts/compact-images.ts",
-    "supplier:invoices": "tsx scripts/import-invoices.ts"
+    "supplier:invoices": "tsx scripts/import-invoices.ts",
+    "pricing:import": "tsx scripts/import-pricing.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -47,6 +48,7 @@
     "drizzle-kit": "^0.31.10",
     "eslint": "^9",
     "eslint-config-next": "16.3.5",
+    "read-excel-file": "^9.3.12",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
     "typescript": "^5"

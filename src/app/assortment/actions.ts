@@ -11,7 +11,11 @@ import {
   searchCatalogForPicker,
   type PickerProduct,
 } from "@/lib/assortment/queries";
-import { addToSupplierCart } from "@/lib/supplier/cart-service";
+import {
+  addManyToSupplierCart,
+  addToSupplierCart,
+} from "@/lib/supplier/cart-service";
+import { logger } from "@/lib/logger";
 import { deleteItemImage, saveItemImageFromUrl } from "@/lib/images/store";
 import {
   searchProductImages,
@@ -277,8 +281,8 @@ export type CartSubmitResult = {
   cart?: { totalItems?: number; totalQuantity?: number; totalPrice?: string };
 };
 
-// Sends the reviewed order lines to the supplier's cart, one call per product.
-// The caller passes exactly what was on screen; if the list has changed since,
+// Sends the reviewed order lines to the supplier's cart in one call. The
+// caller passes exactly what was on screen; if the list has changed since,
 // nothing is sent — ordering should never include something unreviewed.
 export async function addOrderToSupplierCart(options: {
   resetAmounts: boolean;
@@ -309,7 +313,42 @@ export async function addOrderToSupplierCart(options: {
     const failed: CartSubmitResult["failed"] = [];
     let cart: CartSubmitResult["cart"];
 
+    // One request for the whole order instead of one per product. The
+    // supplier refuses the batch as a whole over a single bad line, so
+    // whatever does not come back accepted is retried on its own, which also
+    // tells us which product was the problem.
+    const bulk = lines.filter((line) => line.supplierId != null);
+    let accepted = new Set<string>();
+    if (bulk.length > 0) {
+      try {
+        const result = await addManyToSupplierCart(
+          bulk.map((line) => ({
+            itemNo: line.itemNo!,
+            supplierId: line.supplierId!,
+            quantity: line.quantityToBuy,
+            unitOfMeasure: line.unitOfMeasure,
+          }))
+        );
+        accepted = new Set(result.added);
+        if (result.cart.totalItems != null) cart = result.cart;
+      } catch (error) {
+        logger.warn(
+          `Bulk cart add failed, falling back to one call per line: ${
+            error instanceof Error ? error.message : error
+          }`
+        );
+      }
+    }
+
     for (const line of lines) {
+      if (accepted.has(line.itemNo!)) {
+        added.push({
+          name: line.name,
+          itemNo: line.itemNo!,
+          quantity: line.quantityToBuy,
+        });
+        continue;
+      }
       try {
         cart = await addToSupplierCart(line.itemNo!, line.quantityToBuy);
         added.push({

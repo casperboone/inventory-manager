@@ -116,7 +116,23 @@ export const supplierInvoices = sqliteTable("supplier_invoices", {
     .default("invoice"),
   documentDate: integer("document_date", { mode: "timestamp" }),
   amount: real("amount"),
+  // What it comes to with VAT; the supplier lists both.
+  amountIncludingVat: real("amount_including_vat"),
   lineCount: integer("line_count").notNull().default(0),
+  // The order an invoice came from. Only known while the invoice is still
+  // unpaid, because the outstanding list is the one place that names it.
+  orderNo: text("order_no"),
+  // Fields the supplier carries but leaves empty for us; kept because they
+  // cost nothing and would otherwise need another import to fill in.
+  yourReference: text("your_reference"),
+  salespersonCode: text("salesperson_code"),
+  // Orders only.
+  requestedDeliveryDate: integer("requested_delivery_date", {
+    mode: "timestamp",
+  }),
+  promisedDeliveryDate: integer("promised_delivery_date", {
+    mode: "timestamp",
+  }),
   importedAt: createdAt(),
 });
 
@@ -148,6 +164,32 @@ export const supplierInvoiceLines = sqliteTable(
   ]
 );
 
+// What is still unpaid, straight from the supplier's bookkeeping. Refreshed
+// as a whole on every document import: entries disappear once they are paid,
+// so there is nothing to keep.
+export const supplierOpenEntries = sqliteTable("supplier_open_entries", {
+  documentNo: text("document_no").primaryKey(),
+  documentType: text("document_type", { enum: ["invoice", "creditmemo"] })
+    .notNull()
+    .default("invoice"),
+  documentDate: integer("document_date", { mode: "timestamp" }),
+  description: text("description"),
+  // The order the invoice came from, parsed out of the description. This is
+  // the only place the supplier links the two.
+  orderNo: text("order_no"),
+  // Amounts here include VAT, unlike the document lists.
+  amount: real("amount"),
+  remainingAmount: real("remaining_amount"),
+  dueDate: integer("due_date", { mode: "timestamp" }),
+  // Last day the payment discount ("contantkorting") applies.
+  paymentDiscountDate: integer("payment_discount_date", { mode: "timestamp" }),
+  refreshedAt: integer("refreshed_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type SupplierOpenEntry = typeof supplierOpenEntries.$inferSelect;
+
 export type SupplierInvoice = typeof supplierInvoices.$inferSelect;
 export type SupplierInvoiceLine = typeof supplierInvoiceLines.$inferSelect;
 
@@ -161,6 +203,35 @@ export const supplierProductImages = sqliteTable("supplier_product_images", {
   full: blob("full", { mode: "buffer" }).$type<Buffer>(),
   fullContentType: text("full_content_type"),
   fetchedAt: integer("fetched_at", { mode: "timestamp" }).notNull(),
+});
+
+// How a group of items is priced: the base margin applies up to the pivot
+// price, and the part of the cost above that gets the (lower) premium margin.
+export const pricingCategories = sqliteTable("pricing_categories", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull().unique(),
+  position: integer("position").notNull().default(0),
+  baseMargin: real("base_margin").notNull(),
+  pivotPrice: real("pivot_price").notNull(),
+  premiumMargin: real("premium_margin").notNull(),
+  // Share of a purchase unit that never gets sold (tap loss, spills).
+  wastage: real("wastage").notNull().default(0),
+  vatRate: real("vat_rate").notNull().default(0.21),
+  // Why the numbers are what they are.
+  notes: text("notes"),
+  createdAt: createdAt(),
+});
+
+// One row (id 1) with the settings that apply to all pricing.
+export const pricingSettings = sqliteTable("pricing_settings", {
+  id: integer("id").primaryKey(),
+  // Advice prices are rounded to a multiple of this.
+  priceRounding: real("price_rounding").notNull().default(0.1),
+  // How far a sale price may sit from the advice before it is flagged.
+  adviceTolerance: real("advice_tolerance").notNull().default(0.1),
+  // Drinks whose price per 10 ml of alcohol is below this item's get
+  // flagged, so nothing is a cheaper way to get drunk than the house beer.
+  alcoholReferenceItemId: integer("alcohol_reference_item_id"),
 });
 
 // Our own assortment: what we sell at the bar, grouped into categories that
@@ -196,6 +267,35 @@ export const assortmentItems = sqliteTable(
     quantityToBuy: real("quantity_to_buy").notNull().default(0),
     position: integer("position").notNull().default(0),
     note: text("note"),
+    // Pricing, edited on the pricing page only. The calculation lives in
+    // src/lib/pricing/calc.ts.
+    pricingCategoryId: integer("pricing_category_id").references(
+      () => pricingCategories.id
+    ),
+    // Things we buy but don't sell, like toilet paper or sugar sticks.
+    notForSale: integer("not_for_sale", { mode: "boolean" })
+      .notNull()
+      .default(false),
+    // Liters in one purchase unit (a crate of 24/20cl holds 4.8) and in one
+    // portion; together they give the number of portions.
+    unitVolume: real("unit_volume"),
+    portionVolume: real("portion_volume"),
+    // For what isn't poured (crisps, capsules), or to override the above.
+    portionsPerUnit: real("portions_per_unit"),
+    // As a fraction (0.05 for 5%), like the margins.
+    alcoholPercentage: real("alcohol_percentage"),
+    // Overrides the pricing category's VAT rate.
+    vatRate: real("vat_rate"),
+    // Per purchase unit, excluding VAT. Overrides the supplier's catalog
+    // price, and is the only price for what we buy elsewhere.
+    manualPurchasePrice: real("manual_purchase_price"),
+    // Where an item comes from when it isn't Rust Food.
+    purchaseSource: text("purchase_source"),
+    // What we charge per portion, including VAT.
+    salePrice: real("sale_price"),
+    // The cost per portion when the sale price was last set, so the pricing
+    // page can tell when the purchase price moved since.
+    salePriceCost: real("sale_price_cost"),
     archivedAt: integer("archived_at", { mode: "timestamp" }),
     createdAt: createdAt(),
     updatedAt: integer("updated_at", { mode: "timestamp" })
@@ -223,5 +323,25 @@ export const assortmentItemImages = sqliteTable("assortment_item_images", {
   createdAt: createdAt(),
 });
 
+// Every change to a sale price, for looking back at what we charged when.
+export const salePriceChanges = sqliteTable(
+  "sale_price_changes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    itemId: integer("item_id")
+      .notNull()
+      .references(() => assortmentItems.id, { onDelete: "cascade" }),
+    oldPrice: real("old_price"),
+    newPrice: real("new_price"),
+    // Cost per portion at the time, to see the margin it was set at.
+    cost: real("cost"),
+    createdAt: createdAt(),
+  },
+  (t) => [index("sale_price_changes_item_idx").on(t.itemId, t.createdAt)]
+);
+
+export type PricingCategory = typeof pricingCategories.$inferSelect;
+export type PricingSettings = typeof pricingSettings.$inferSelect;
+export type SalePriceChange = typeof salePriceChanges.$inferSelect;
 export type AssortmentCategory = typeof assortmentCategories.$inferSelect;
 export type AssortmentItem = typeof assortmentItems.$inferSelect;

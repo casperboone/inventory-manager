@@ -30,6 +30,7 @@ export type InvoiceImportActionResult =
       remaining: number;
       openOrders: number;
       creditMemos: number;
+      openEntries: number;
     }
   | { ok: false; error: string };
 
@@ -46,6 +47,7 @@ export async function runInvoiceImport(): Promise<InvoiceImportActionResult> {
       remaining: result.remaining,
       openOrders: result.openOrders,
       creditMemos: result.creditMemos,
+      openEntries: result.openEntries,
     };
   } catch (error) {
     return {

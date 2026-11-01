@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/assortment", label: "Assortment" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/products", label: "Catalog" },
   { href: "/financials", label: "Rust Financials" },
   { href: "/imports", label: "Imports" },
@@ -25,13 +26,13 @@ export function AppHeader() {
           <PackageIcon className="size-5" />
           <span className="hidden sm:inline">Inventory Manager</span>
         </Link>
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="-mr-4 flex min-w-0 items-center gap-1 overflow-x-auto pr-4 text-sm">
           {NAV.map((item) => (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "rounded-md px-3 py-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                "rounded-md px-3 py-1.5 whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
                 pathname.startsWith(item.href) && "bg-muted text-foreground"
               )}
             >

@@ -191,6 +191,38 @@ export async function getPurchaseLines(
   }));
 }
 
+// Units bought per product in a few years at once, for the pricing table.
+// Same rules as above: credit notes count against it, open orders and
+// deposits are left out.
+export async function getQuantitiesByYear(
+  years: string[]
+): Promise<Map<string, Map<string, number>>> {
+  const result = new Map<string, Map<string, number>>();
+  if (years.length === 0) return result;
+  const rows = await db.all<{ item_no: string; year: string; quantity: number }>(
+    sql`
+      select
+        item_no,
+        strftime('%Y', document_date, 'unixepoch') as year,
+        coalesce(sum(${SIGN} * quantity), 0) as quantity
+      from supplier_invoice_lines
+      where document_type in ('invoice', 'creditmemo')
+        and not ${DEPOSIT_MATCH}
+        and strftime('%Y', document_date, 'unixepoch') in (${sql.join(
+          years.map((year) => sql`${year}`),
+          sql`, `
+        )})
+      group by item_no, year
+    `
+  );
+  for (const row of rows) {
+    const perYear = result.get(row.item_no) ?? new Map<string, number>();
+    perYear.set(row.year, row.quantity);
+    result.set(row.item_no, perYear);
+  }
+  return result;
+}
+
 export type PurchaseDocumentLine = {
   documentNo: string;
   documentType: "invoice" | "creditmemo";

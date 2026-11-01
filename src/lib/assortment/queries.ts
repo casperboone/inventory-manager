@@ -21,6 +21,8 @@ export type AssortmentRow = {
   categoryId: number;
   supplierProductId: number | null;
   itemNo: string | null;
+  // The portal's own product id, which its bulk cart endpoint keys on.
+  supplierId: number | null;
   supplierDescription: string | null;
   unitOfMeasure: string | null;
   unitPrice: number | null;
@@ -54,6 +56,7 @@ async function selectItems(archived: boolean) {
       position: assortmentItems.position,
       supplierProductId: assortmentItems.supplierProductId,
       itemNo: supplierProducts.itemNo,
+      supplierId: supplierProducts.supplierId,
       supplierDescription: supplierProducts.description,
       unitOfMeasure: supplierProducts.unitOfMeasure,
       unitPrice: supplierProducts.unitPrice,
@@ -109,6 +112,7 @@ function groupByCategory(
       categoryId: row.categoryId,
       supplierProductId: row.supplierProductId,
       itemNo: row.itemNo,
+      supplierId: row.supplierId,
       supplierDescription: row.supplierDescription,
       unitOfMeasure: row.unitOfMeasure,
       unitPrice: row.unitPrice,

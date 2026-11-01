@@ -48,3 +48,8 @@ export function formatDuration(start: Date, end: Date | null) {
 export function formatNumber(value: number | null | undefined) {
   return value == null ? "—" : value.toLocaleString("en-GB");
 }
+
+// For margins and rates, which are stored as fractions.
+export function formatPercent(value: number | null | undefined, digits = 0) {
+  return value == null ? "—" : `${(value * 100).toFixed(digits)}%`;
+}

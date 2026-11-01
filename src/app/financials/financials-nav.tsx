@@ -8,6 +8,7 @@ const SECTIONS = [
   { href: "/financials/purchase-history", label: "Purchase History" },
   { href: "/financials/invoices", label: "Invoices" },
   { href: "/financials/orders", label: "Orders" },
+  { href: "/financials/outstanding", label: "Outstanding" },
 ];
 
 export function FinancialsNav() {

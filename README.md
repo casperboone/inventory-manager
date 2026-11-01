@@ -33,8 +33,12 @@ the +/− buttons as a reference while ordering.
 "Review" (in the bar at the bottom) opens `/assortment/review`: notes and
 products without a usable catalog link are listed on top as things to handle
 yourself, followed by everything that goes into the supplier cart. "Add all to
-the supplier cart" posts each line to `/OrderConfirm/quickItemAdd`, with
+the supplier cart" sends the whole order in one request
+(`/Product/additems`, the call behind their own "add all" button), with
 optional checkboxes to reset the amounts and delete the notes afterwards.
+The supplier refuses such a batch as a whole over a single line it does not
+like, so anything that does not come back accepted is retried on its own
+(`/OrderConfirm/quickItemAdd`) to find out which product was the problem.
 Amounts are only reset for lines that were actually accepted, notes only when
 the whole order went through, and the order is refused when the list changed
 while you were reviewing. Placing the order itself still happens at Rust Food.
@@ -58,6 +62,54 @@ work for accounts that already had access. Repeated searches are cached for
 Every row in the catalog (`/products`, and the import detail pages) also has a
 cart button for a one-off order: pick an amount and it goes straight into the
 supplier cart, without touching the assortment.
+
+## Pricing
+
+`/pricing` sets what we charge, on the same assortment items as the order
+page but on its own screen. The model comes from the bar's old
+"Prijsberekening" sheet (`src/lib/pricing/calc.ts`):
+
+- **Cost per portion** = purchase price × (1 + VAT) ÷ (portions × (1 − loss)).
+  The purchase price is Rust's catalog price (already net of the line
+  discount) unless the item has a manual one; portions follow from the liters
+  in a unit and in a portion, or are filled in directly for what isn't poured.
+- **Advice**: the cost is marked up with the category's *base margin* while the
+  price stays under its *pivot price*; the part of the cost above that only
+  gets the lower *premium margin*, like tax brackets. Rounded to the setting
+  (€ 0,10).
+- **Price** is chosen by hand, inline in the table, with a button to take the
+  advice. Every change is kept in `sale_price_changes`. Like the old sheet,
+  it turns green when it is more than € 0,125 above the unrounded advice and
+  red when it is that far below.
+
+The table is grouped by order category, like the order page, with each row's
+pricing category as a label. It also shows the portions bought this year
+and last year, from the invoices.
+
+*Calculator* tries a price for something that isn't in the assortment yet:
+pick a pricing category, enter a purchase price and the contents (or paste a
+supplier description to read them from), and it shows the cost per portion,
+the advice with how it splits over the two margins, and what your own price
+would earn. Nothing there is saved.
+
+Pricing categories (margins, pivot price, loss, default VAT) and the settings
+live under *Categories & settings*. Each item has a pricing category, a VAT
+override, contents, alcohol percentage and a "not for sale" flag; the dialog
+can read the contents from the supplier's description ("24/20CL", "FUST
+20LT"). Items bought elsewhere (the rotating whisky) are added with *Other
+supplier item*: they get a manual purchase price and also show on the order
+page, where the review lists them to order by hand.
+
+Rows are flagged when data is missing, the price is more than the tolerance
+(10%) below the advice, the margin is below the premium margin, the cost per
+portion moved since the price was last saved (save it again to accept), or
+10 ml of alcohol is cheaper than in the reference drink (Queer Beer).
+
+The sheet was imported once with
+`npm run pricing:import -- Prijsberekening.xlsx` (dry run; add `--apply` to
+write). It matches rows to items by article number within the same heading,
+then by name, skips ARCHIEF, prefers the alcohol percentage from the
+supplier's description, and refuses to run once pricing categories exist.
 
 ## Line discounts (regelkorting)
 
@@ -97,12 +149,34 @@ Everything that comes from Rust Food's own bookkeeping sits behind one nav
 entry, since it is secondary to ordering: purchase history, invoices and
 orders.
 
+The section header says how much has been imported and how far it runs, with
+the import button right there, so you can check and top it up from the pages
+that use the data. (It is also still on the imports page.)
+
 `/financials/invoices` lists the posted invoices and credit notes, searchable
 by document number or by what is on them (searching "fireball" gives every
 invoice that product is on). `/financials/orders` does the same for orders
 that have not been invoiced yet. Both open a document page with all its
-lines, the discount per line, what the discount saved and the total; item
-numbers link through to the catalog.
+lines, the discount per line, what the discount saved and the total, both
+excluding and including VAT; item numbers link through to the catalog. An
+order also says when it is promised, and an invoice which order it came
+from — the supplier only names that while the invoice is unpaid, so older
+invoices do not have it.
+
+An invoice or credit note also has its original PDF, one click from the
+document page and from the outstanding list. The supplier only hands it to a
+logged-in session, so it comes through `/api/documents/<number>` with ours.
+Orders have no PDF until they are invoiced.
+
+### Outstanding
+
+`/financials/outstanding` is the supplier's own list of what is still unpaid
+("openstaande posten"): invoices waiting to be paid, plus credit notes that
+have not been settled against them, with what it adds up to and what is past
+its due date. Amounts include VAT, unlike everywhere else. The list is
+replaced on every document import, since entries simply disappear once they
+are paid. Anything overdue also shows next to the section header, so you
+notice it from any of these pages.
 
 ### Purchase History
 
@@ -133,6 +207,12 @@ The supplier webshop (DIN Online, `b2b-rustfood.dinonline.nl`) has no API. The
 import logs in like a browser (`src/lib/supplier/auth-service.ts`) and pages
 through the catalog's DataTables endpoint (`src/lib/supplier/catalog-service.ts`),
 1000 rows per request.
+
+[`docs/dinonline-portal.md`](docs/dinonline-portal.md) is the reference for
+that portal: how the session works, every endpoint we know of with its
+fields, the quirks (a JSON endpoint answers 500 unless its own page was
+loaded first) and what we deliberately leave alone. Read it before building
+anything that talks to the supplier.
 
 Each import records which products are new, which prices changed and which
 products disappeared from the catalog. Products are never deleted, only marked
