@@ -11,6 +11,7 @@ import {
   formatNumber,
   formatPrice,
 } from "@/lib/format";
+import { getItemLinksByItemNo } from "@/lib/items/queries";
 import { getImport, getImportChanges } from "@/lib/products/queries";
 import { cn } from "@/lib/utils";
 
@@ -24,7 +25,10 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
   const run = await getImport(Number(id));
   if (!run) notFound();
 
-  const { newProducts, priceChanges, removed } = await getImportChanges(run.id);
+  const [{ newProducts, priceChanges, removed }, items] = await Promise.all([
+    getImportChanges(run.id),
+    getItemLinksByItemNo(),
+  ]);
   const priceByProduct = new Map(
     priceChanges.map((change) => [change.product.id, change])
   );
@@ -90,12 +94,14 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
         <TabsContent value="new" className="mt-3">
           <ProductsTable
             products={newProducts}
+            items={items}
             emptyMessage="No new products in this import."
           />
         </TabsContent>
         <TabsContent value="prices" className="mt-3">
           <ProductsTable
             products={priceChanges.map((change) => change.product)}
+            items={items}
             emptyMessage="No price changes in this import."
             renderPrice={(product) => {
               const change = priceByProduct.get(product.id);
@@ -107,6 +113,7 @@ export default async function ImportPage(props: PageProps<"/imports/[id]">) {
         <TabsContent value="removed" className="mt-3">
           <ProductsTable
             products={removed}
+            items={items}
             emptyMessage="No products were removed from the catalog in this import."
           />
         </TabsContent>

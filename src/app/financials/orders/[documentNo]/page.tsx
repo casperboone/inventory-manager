@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { ArrowLeftIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDate, formatNumber } from "@/lib/format";
+import { getItemLinksByItemNo } from "@/lib/items/queries";
 import { getDocument } from "@/lib/products/documents";
 import { DocumentLines, DocumentTypeBadge } from "../../document-lines";
 import { DocumentMeta, DocumentTotals } from "../../document-meta";
@@ -20,7 +21,10 @@ export default async function OrderPage(
   props: PageProps<"/financials/orders/[documentNo]">
 ) {
   const { documentNo } = await props.params;
-  const document = await getDocument(decodeURIComponent(documentNo));
+  const [document, items] = await Promise.all([
+    getDocument(decodeURIComponent(documentNo)),
+    getItemLinksByItemNo(),
+  ]);
   if (!document || document.header.documentType !== "order") notFound();
 
   const { header, lines, totals, orderLinked } = document;
@@ -50,7 +54,7 @@ export default async function OrderPage(
 
       <DocumentMeta header={header} orderLinked={orderLinked} />
 
-      <DocumentLines lines={lines} />
+      <DocumentLines lines={lines} items={items} />
 
       <DocumentTotals header={header} totals={totals} label="Order total excl. VAT" />
     </div>

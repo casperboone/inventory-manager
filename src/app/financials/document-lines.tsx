@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ItemLinks } from "@/components/item-links";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -9,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { formatPrice } from "@/lib/format";
+import type { ItemLink } from "@/lib/items/queries";
 import type { DocumentLine, DocumentType } from "@/lib/products/documents";
 import { cn } from "@/lib/utils";
 
@@ -28,7 +30,14 @@ export function DocumentTypeBadge({ type }: { type: DocumentType }) {
 
 // The lines of one document, shared by invoices and orders since the supplier
 // returns them in the same shape.
-export function DocumentLines({ lines }: { lines: DocumentLine[] }) {
+export function DocumentLines({
+  lines,
+  items,
+}: {
+  lines: DocumentLine[];
+  // Our own items per item number, for the lines that have one.
+  items: Map<string, ItemLink[]>;
+}) {
   return (
     <div className="overflow-hidden rounded-lg border bg-background">
       <Table className="text-xs [&_td]:px-1.5 [&_th]:px-1.5 sm:text-sm sm:[&_td]:px-2 sm:[&_th]:px-2">
@@ -66,6 +75,7 @@ export function DocumentLines({ lines }: { lines: DocumentLine[] }) {
               </TableCell>
               <TableCell className="min-w-28 break-words whitespace-normal">
                 {line.description ?? line.itemNo}
+                <ItemLinks items={items.get(line.itemNo)} />
               </TableCell>
               <TableCell className="text-right tabular-nums">
                 {line.quantity ?? "—"}
