@@ -41,18 +41,52 @@ moving an item to another category happens in its form.
 A target is the desired stock in the supplier's sales unit, shown big next to
 the +/− buttons as a reference while ordering.
 
+The amounts belong to an order, not to the item. The first + starts a draft, and
+the selector above the list switches between drafts or starts another; each
+device remembers the one it last worked on. "One-off" adds something for this
+order only, without putting it on the list: a catalog product, which goes to the
+cart like anything else, or free text, which you tick off by hand. A note can
+become a one-off with the button on its row.
+
 "Review" (in the bar at the bottom) opens `/order-list/review`: notes and
 products without a usable catalog link are listed on top as things to handle
 yourself, followed by everything that goes into the supplier cart. "Add all to
 the supplier cart" sends the whole order in one request
-(`/Product/additems`, the call behind their own "add all" button), with
-optional checkboxes to reset the amounts and delete the notes afterwards.
-The supplier refuses such a batch as a whole over a single line it does not
-like, so anything that does not come back accepted is retried on its own
-(`/OrderConfirm/quickItemAdd`) to find out which product was the problem.
-Amounts are only reset for lines that were actually accepted, notes only when
-the whole order went through, and the order is refused when the list changed
-while you were reviewing. Placing the order itself still happens at Rust Food.
+(`/Product/additems`, the call behind their own "add all" button), with an
+optional checkbox to delete the notes afterwards. Lines for the same product go
+in once, with their total. The supplier refuses such a batch as a whole over a
+single line it does not like, so anything that does not come back accepted is
+retried on its own (`/OrderConfirm/quickItemAdd`) to find out which product was
+the problem. A refused line stays on the order to send again, notes are only
+deleted when the whole order went through, and the order is refused when it
+changed while you were reviewing. Placing the order itself still happens at Rust
+Food: **the app never places an order.**
+
+### Tracking what came of an order
+
+Sending keeps the amounts on the order and shows a reference like `IM-42`. Paste
+that into "Uw referentie" at Rust's checkout, and everything Rust shows for it
+links to the order by itself. "Import invoices & orders" on `/orders` is what
+brings those documents in; nothing runs on a schedule.
+
+Without a reference (forgotten, or a `VORD` order Rust created itself) the order
+page suggests documents from around that date with the same products, for you to
+link or turn down, and you can pick one by hand. One order can have several Rust
+orders, invoices and credit notes; a document belongs to one order at most.
+
+Rust has no delivery notes, so "delivered" means invoiced, less credit notes. A
+line waits until its Rust order has an invoice and has left the open list, and
+then counts as short or missing; an order with no invoice two weeks after sending
+gets a flag. Deposits, the fuel surcharge and corrections don't count. What's on
+the documents but not on the order shows as extra, and returns on an invoice show
+apart, because they're usually from an earlier delivery. `/orders/not-delivered`
+lists everything short over all orders, to add to the current order or accept. If
+something similar came instead, the order page offers it as a replacement. Free
+text and items without a catalog link can't be matched, so they're ticked off by
+hand. The logic is in `src/lib/orders/matching.ts`, with its tests next to it.
+
+An order is complete once every line is delivered, replaced or accepted. "Close"
+ends the tracking of one that won't get there, like a cart that was never placed.
 
 The Google Sheets export was imported once with
 `npm run assortment:import -- <file.csv>` (skips ARCHIEF, order amounts start
