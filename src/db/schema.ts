@@ -3,9 +3,11 @@ import {
   blob,
   index,
   integer,
+  primaryKey,
   real,
   sqliteTable,
   text,
+  uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
 const createdAt = () =>
@@ -278,7 +280,8 @@ export const assortmentItems = sqliteTable(
     ),
     // Desired amount in stock, in the supplier's sales unit. Can be a half.
     target: real("target"),
-    // Amount to order on the next run; the order page edits this directly.
+    // Retired: amounts now live on order lines. Left in place so a migration
+    // never has to race a deploy; nothing reads it anymore.
     quantityToBuy: real("quantity_to_buy").notNull().default(0),
     position: integer("position").notNull().default(0),
     note: text("note"),
@@ -355,6 +358,151 @@ export const salePriceChanges = sqliteTable(
   },
   (t) => [index("sale_price_changes_item_idx").on(t.itemId, t.createdAt)]
 );
+
+// What we mean to buy, from first tap until it's delivered. Rust never hears
+// about this: filling the cart is all the app does, and the order itself is
+// placed by hand at Rust, so what came of it is worked out afterwards.
+export const orders = sqliteTable("orders", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  // Optional, for telling drafts apart ("Kerstborrel").
+  name: text("name"),
+  // Sent means the cart was filled; whether it got placed shows from what
+  // turns up at Rust. Closed is by hand, for when nothing more is expected.
+  status: text("status", { enum: ["draft", "sent", "closed"] })
+    .notNull()
+    .default("draft"),
+  sentAt: integer("sent_at", { mode: "timestamp" }),
+  closedAt: integer("closed_at", { mode: "timestamp" }),
+  createdAt: createdAt(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export const orderLines = sqliteTable(
+  "order_lines",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    // Null for a one-off. Also null after the item is deleted, which is why
+    // the fields below keep what the line was.
+    itemId: integer("item_id").references(() => assortmentItems.id, {
+      onDelete: "set null",
+    }),
+    // Empty for free text, which comes from elsewhere or isn't in the catalog
+    // and gets ticked off by hand.
+    itemNo: text("item_no"),
+    supplierId: integer("supplier_id"),
+    name: text("name").notNull(),
+    unitOfMeasure: text("unit_of_measure"),
+    unitPrice: real("unit_price"),
+    // Free text only: where it's bought, if not at Rust.
+    source: text("source"),
+    quantity: real("quantity").notNull(),
+    // How much of the quantity went to the cart or, when it can't, to you.
+    // Whatever is above this still has to be sent.
+    sentQuantity: real("sent_quantity").notNull().default(0),
+    // Why the cart wouldn't take it, the last time it was tried.
+    cartError: text("cart_error"),
+    // Ticked off by hand, on top of what's on the invoices.
+    receivedQuantity: real("received_quantity").notNull().default(0),
+    // Accepted: it's short and that's fine. Substituted: Rust sent the product
+    // below instead, so that counts as this line.
+    resolution: text("resolution", { enum: ["accepted", "substituted"] }),
+    substituteItemNo: text("substitute_item_no"),
+    createdAt: createdAt(),
+  },
+  (t) => [
+    index("order_lines_order_idx").on(t.orderId),
+    // One-offs have no item and aren't limited by this; null never collides.
+    uniqueIndex("order_lines_order_item_idx").on(t.orderId, t.itemId),
+    index("order_lines_item_idx").on(t.itemId),
+  ]
+);
+
+// Rust's orders as they were while open. The rows in supplier_invoices go once
+// an order is invoiced, because discounts and purchases read those as "still
+// open"; these stay, so we can tell later what Rust accepted.
+export const supplierOrders = sqliteTable("supplier_orders", {
+  orderNo: text("order_no").primaryKey(),
+  orderDate: integer("order_date", { mode: "timestamp" }),
+  amount: real("amount"),
+  amountIncludingVat: real("amount_including_vat"),
+  yourReference: text("your_reference"),
+  requestedDeliveryDate: integer("requested_delivery_date", {
+    mode: "timestamp",
+  }),
+  promisedDeliveryDate: integer("promised_delivery_date", {
+    mode: "timestamp",
+  }),
+  // Null while it's on the open list.
+  leftOpenListAt: integer("left_open_list_at", { mode: "timestamp" }),
+  firstSeenAt: createdAt(),
+});
+
+export const supplierOrderLines = sqliteTable(
+  "supplier_order_lines",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orderNo: text("order_no")
+      .notNull()
+      .references(() => supplierOrders.orderNo, { onDelete: "cascade" }),
+    itemNo: text("item_no").notNull(),
+    description: text("description"),
+    quantity: real("quantity"),
+    unitPrice: real("unit_price"),
+    discountPercent: real("discount_percent"),
+    amount: real("amount"),
+  },
+  (t) => [
+    index("supplier_order_lines_order_idx").on(t.orderNo),
+    index("supplier_order_lines_item_idx").on(t.itemNo),
+  ]
+);
+
+// Which of Rust's documents came from an order of ours. One order can have
+// several; a document belongs to one order at most.
+export const orderDocuments = sqliteTable(
+  "order_documents",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    documentNo: text("document_no").notNull().unique(),
+    documentType: text("document_type", {
+      enum: ["order", "invoice", "creditmemo"],
+    }).notNull(),
+    // Reference: it carries ours. Followed: the invoice of an order already
+    // linked. Suggested: confirmed by you. Manual: picked by you.
+    source: text("source", {
+      enum: ["reference", "followed", "suggested", "manual"],
+    }).notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [index("order_documents_order_idx").on(t.orderId)]
+);
+
+// Suggestions you turned down, so they don't come back on the next check.
+export const orderDocumentRejections = sqliteTable(
+  "order_document_rejections",
+  {
+    orderId: integer("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    documentNo: text("document_no").notNull(),
+    createdAt: createdAt(),
+  },
+  (t) => [primaryKey({ columns: [t.orderId, t.documentNo] })]
+);
+
+export type Order = typeof orders.$inferSelect;
+export type OrderLine = typeof orderLines.$inferSelect;
+export type OrderDocument = typeof orderDocuments.$inferSelect;
+export type SupplierOrder = typeof supplierOrders.$inferSelect;
+export type SupplierOrderLine = typeof supplierOrderLines.$inferSelect;
 
 export type PricingCategory = typeof pricingCategories.$inferSelect;
 export type PricingSettings = typeof pricingSettings.$inferSelect;
