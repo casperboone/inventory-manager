@@ -5,7 +5,9 @@ import { useRouter } from "next/navigation";
 import {
   ArchiveIcon,
   ArchiveRestoreIcon,
+  BanknoteIcon,
   Loader2Icon,
+  PackageIcon,
   PlusIcon,
   SparklesIcon,
   Trash2Icon,
@@ -102,7 +104,7 @@ export function ItemDialog({
   return (
     <Dialog open={state !== null} onOpenChange={(next) => !next && onClose()}>
       {/* Only the fields scroll, so Save stays in reach. */}
-      <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-lg">
+      <DialogContent className="flex max-h-[90dvh] flex-col sm:max-w-lg lg:max-w-5xl">
         {state && (
           // Remounting per item gives the form fresh initial values.
           <ItemDialogBody
@@ -374,7 +376,7 @@ function ItemForm({
   return (
     <>
       <DialogHeader className="shrink-0">
-        <DialogTitle className="pr-6 leading-snug break-words">
+        <DialogTitle className="pr-6 leading-snug break-words lg:pr-32">
           {item
             ? item.name
             : otherSupplier
@@ -390,21 +392,25 @@ function ItemForm({
               ? "For what we buy somewhere other than Rust Food. It also shows on the order list, to order by hand."
               : "The name is what you see while ordering. Link a catalog product to order it and to show its price."}
         </DialogDescription>
-        <div className="flex flex-wrap items-center gap-1.5">
+        {/* Side by side there's nothing to jump to, so only the link stays,
+            up next to the close button. */}
+        <div className="flex flex-wrap items-center gap-1.5 lg:absolute lg:top-2.5 lg:right-11">
           <Button
             type="button"
             variant="outline"
             size="xs"
+            className="lg:hidden"
             onClick={() =>
               itemSection.current?.scrollIntoView({ behavior: "smooth" })
             }
           >
-            Item
+            Details
           </Button>
           <Button
             type="button"
             variant="outline"
             size="xs"
+            className="lg:hidden"
             onClick={() =>
               pricingSection.current?.scrollIntoView({ behavior: "smooth" })
             }
@@ -425,11 +431,17 @@ function ItemForm({
           fit a long supplier description, even though that text truncates. */}
       <form
         onSubmit={onSubmit}
-        className="flex min-h-0 min-w-0 flex-1 flex-col gap-4"
+        className="flex min-h-0 min-w-0 flex-1 flex-col"
       >
-        <div className="-mx-4 min-h-0 flex-1 space-y-6 overflow-x-hidden overflow-y-auto px-4">
-          <section ref={itemSection} className="space-y-4">
-            <SectionHeading>Item</SectionHeading>
+        {/* Stacked, this scrolls as a whole. Side by side, each panel scrolls
+            on its own, and the panels run from the header to the footer. */}
+        <div className="-mx-4 grid min-h-0 flex-1 grid-cols-1 content-start items-start gap-6 overflow-x-hidden overflow-y-auto border-t px-4 pb-4 lg:grid-cols-2 lg:grid-rows-[minmax(0,1fr)] lg:content-stretch lg:items-stretch lg:gap-0 lg:divide-x lg:overflow-hidden lg:px-0 lg:pb-0">
+          <section ref={itemSection} className={PANEL}>
+            <SectionHeading
+              icon={PackageIcon}
+              title="Details"
+              description="How it shows on the order list, and what we order."
+            />
 
             <div className="space-y-2">
               <Label htmlFor="item-name">Name</Label>
@@ -531,8 +543,12 @@ function ItemForm({
             </div>
           </section>
 
-          <section ref={pricingSection} className="space-y-4">
-            <SectionHeading>Pricing</SectionHeading>
+          <section ref={pricingSection} className={PANEL}>
+            <SectionHeading
+              icon={BanknoteIcon}
+              title="Pricing"
+              description="What it costs us, and what we charge."
+            />
 
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
@@ -763,9 +779,35 @@ function ItemForm({
   );
 }
 
-function SectionHeading({ children }: { children: React.ReactNode }) {
+const PANEL =
+  "space-y-4 lg:min-h-0 lg:overflow-x-hidden lg:overflow-y-auto lg:px-4 lg:pb-4";
+
+// Stays in view while its section scrolls. The solid layer keeps the fields
+// from showing through the tint, which matches the dialog's footer.
+function SectionHeading({
+  icon: Icon,
+  title,
+  description,
+}: {
+  icon: React.ComponentType<{ className?: string }>;
+  title: string;
+  description: string;
+}) {
   return (
-    <h3 className="border-b pb-1.5 text-sm font-semibold">{children}</h3>
+    <div className="sticky top-0 z-10 -mx-4 bg-popover">
+      <div className="flex items-center gap-2.5 border-b bg-muted/50 px-4 py-2.5">
+        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg border bg-background text-muted-foreground">
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0">
+          <h3 className="text-sm leading-tight font-semibold">{title}</h3>
+          {/* On a phone this band stays pinned, so it has to stay short. */}
+          <p className="hidden text-xs text-muted-foreground lg:block">
+            {description}
+          </p>
+        </div>
+      </div>
+    </div>
   );
 }
 
