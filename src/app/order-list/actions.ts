@@ -223,11 +223,12 @@ export async function clearDraft(orderId: number) {
 }
 
 // A second order next to the current one, which becomes the one you work on.
-export async function createDraft(name: string) {
+// It can get a name on its own page, if it needs one.
+export async function createDraft() {
   try {
     const [created] = await db
       .insert(orders)
-      .values({ name: name.trim().slice(0, 80) || null })
+      .values({})
       .returning({ id: orders.id });
     await rememberCurrentOrder(created.id);
     revalidateOrderScreens();

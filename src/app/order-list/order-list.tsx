@@ -185,16 +185,11 @@ export function OrderList({
 
   function selectDraft(value: string) {
     startTransition(async () => {
-      let result: { ok: true } | { ok: false; error: string };
-      if (value === NEW_ORDER) {
-        const name = window.prompt("Name for the new order (optional)");
-        if (name === null) return;
-        await savePendingNow();
-        result = await createDraft(name);
-      } else {
-        await savePendingNow();
-        result = await switchDraft(Number(value));
-      }
+      await savePendingNow();
+      const result =
+        value === NEW_ORDER
+          ? await createDraft()
+          : await switchDraft(Number(value));
       if (result.ok) forgetEdits();
       else toast.error(result.error);
     });

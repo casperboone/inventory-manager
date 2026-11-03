@@ -19,6 +19,7 @@ import {
   orders,
   supplierProducts,
 } from "@/db/schema";
+import { OVERDUE_AFTER_DAYS } from "./matching";
 
 // Remembers the draft you last worked on, per device: the phone on the walk
 // around the stock shouldn't jump to a draft someone started on the laptop.
@@ -190,14 +191,13 @@ export async function getOrderReview(
       id: orderLines.id,
       itemId: orderLines.itemId,
       lineName: orderLines.name,
-      lineItemNo: orderLines.itemNo,
-      lineSupplierId: orderLines.supplierId,
       lineUnit: orderLines.unitOfMeasure,
       linePrice: orderLines.unitPrice,
       quantity: orderLines.quantity,
       sentQuantity: orderLines.sentQuantity,
       source: orderLines.source,
       cartError: orderLines.cartError,
+      resolution: orderLines.resolution,
       itemName: assortmentItems.name,
       categoryName: assortmentCategories.name,
       productId: supplierProducts.id,
@@ -236,7 +236,8 @@ export async function getOrderReview(
     );
 
   const unsent: ReviewLine[] = rows
-    .filter((row) => row.quantity > row.sentQuantity)
+    // Accepted or replaced means it's been dealt with, so it stays out.
+    .filter((row) => row.quantity > row.sentQuantity && !row.resolution)
     .map((row) => ({
       id: row.id,
       itemId: row.itemId,
@@ -262,13 +263,20 @@ export async function getOrderReview(
 }
 
 // Sent orders Rust hasn't shown anything for yet. They may well still be in
-// the cart, and whatever goes in next would end up on the same Rust order.
+// the cart, and whatever goes in next would end up on the same Rust order. After
+// a while that's unlikely, and the order page asks about those instead.
 export async function getOrdersPossiblyInCart(exceptOrderId: number) {
   const sent = await db
     .select({ id: orders.id, name: orders.name, sentAt: orders.sentAt })
     .from(orders)
     .where(eq(orders.status, "sent"));
-  const others = sent.filter((order) => order.id !== exceptOrderId);
+  const since = Date.now() - OVERDUE_AFTER_DAYS * 24 * 60 * 60 * 1000;
+  const others = sent.filter(
+    (order) =>
+      order.id !== exceptOrderId &&
+      order.sentAt !== null &&
+      order.sentAt.getTime() > since
+  );
   if (others.length === 0) return [];
 
   const linked = await db
