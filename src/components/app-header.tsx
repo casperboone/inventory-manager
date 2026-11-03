@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { PackageIcon } from "lucide-react";
+import { ScrollRow } from "@/components/scroll-row";
+import { findActiveHref } from "@/lib/section-nav";
 import { cn } from "@/lib/utils";
 
 const NAV = [
@@ -16,6 +18,10 @@ const NAV = [
 
 export function AppHeader() {
   const pathname = usePathname();
+  const activeHref = findActiveHref(
+    pathname,
+    NAV.map((item) => item.href),
+  );
 
   return (
     <header className="border-b bg-background">
@@ -27,19 +33,26 @@ export function AppHeader() {
           <PackageIcon className="size-5" />
           <span className="hidden sm:inline">Inventory Manager</span>
         </Link>
-        <nav className="-mr-4 flex min-w-0 items-center gap-1 overflow-x-auto pr-4 text-sm">
-          {NAV.map((item) => (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "rounded-md px-3 py-1.5 whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
-                pathname.startsWith(item.href) && "bg-muted text-foreground"
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
+        <nav aria-label="Main" className="-mr-4 min-w-0 text-sm">
+          <ScrollRow activeKey={activeHref} className="items-center gap-1 pr-4">
+            {NAV.map((item) => {
+              const active = item.href === activeHref;
+              return (
+                <Link
+                  key={item.href}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  data-active={active || undefined}
+                  className={cn(
+                    "shrink-0 rounded-md px-3 py-1.5 whitespace-nowrap text-muted-foreground transition-colors hover:bg-muted hover:text-foreground",
+                    active && "bg-muted text-foreground"
+                  )}
+                >
+                  {item.label}
+                </Link>
+              );
+            })}
+          </ScrollRow>
         </nav>
       </div>
     </header>

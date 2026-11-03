@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ImportButton } from "@/components/import-button";
-import { SectionNav } from "@/components/section-tabs";
+import { SectionBar } from "@/components/section-tabs";
 import { SyncStatusLine } from "@/components/sync-status-line";
+import { Badge } from "@/components/ui/badge";
 import { formatPrice } from "@/lib/format";
 import { getOpenEntries } from "@/lib/products/open-entries";
 import { getSyncStatus } from "@/lib/products/queries";
@@ -26,24 +27,21 @@ export default async function FinancialsLayout({
   ]);
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <SectionNav sections={SECTIONS} match="prefix" />
-        <div className="flex flex-wrap items-center gap-3">
-          <SyncStatusLine status={status} className="text-xs" />
-          {/* Something past its due date is worth seeing without clicking. */}
-          {open.overdue > 0 && (
-            <Link
-              href="/financials/outstanding"
-              className="rounded-md bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive"
-            >
-              {formatPrice(open.overdue)} overdue
-            </Link>
-          )}
-          <ImportButton kind="documents" running={status.running} />
-        </div>
-      </div>
+    <>
+      <SectionBar label="Rust Financials" sections={SECTIONS}>
+        <SyncStatusLine status={status} className="text-xs" />
+        {/* Something past its due date is worth seeing without clicking. */}
+        {open.overdue > 0 && (
+          <Badge
+            variant="destructive"
+            render={<Link href="/financials/outstanding" />}
+          >
+            {formatPrice(open.overdue)} overdue
+          </Badge>
+        )}
+        <ImportButton kind="documents" running={status.running} compact />
+      </SectionBar>
       {children}
-    </div>
+    </>
   );
 }

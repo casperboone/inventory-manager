@@ -1,7 +1,7 @@
-import { SectionNav } from "@/components/section-tabs";
+import { SectionBar } from "@/components/section-tabs";
 
 const SECTIONS = [
-  { href: "/pricing", label: "Pricing" },
+  { href: "/pricing", label: "Prices" },
   { href: "/pricing/calculator", label: "Calculator" },
   { href: "/pricing/categories", label: "Categories & settings" },
 ];
@@ -14,9 +14,9 @@ export default function PricingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-4">
-      <SectionNav sections={SECTIONS} match="exact" />
+    <>
+      <SectionBar label="Pricing" sections={SECTIONS} />
       {children}
-    </div>
+    </>
   );
 }

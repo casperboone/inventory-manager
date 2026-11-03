@@ -6,15 +6,18 @@ import { DownloadIcon, Loader2Icon, ReceiptTextIcon } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { runInvoiceImport, runSupplierImport } from "@/app/imports/actions";
+import { cn } from "@/lib/utils";
 
 // The two imports stay separate requests: the catalog alone takes most of the
 // hosting time limit, so one server action could not run both.
 export function ImportButton({
   kind,
   running,
+  compact = false,
 }: {
   kind: "catalog" | "documents";
   running: boolean;
+  compact?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -55,9 +58,14 @@ export function ImportButton({
   }
 
   const busy = pending || running;
+  const size = compact ? "sm" : undefined;
   if (kind === "catalog") {
     return (
-      <Button onClick={() => startTransition(importCatalog)} disabled={busy}>
+      <Button
+        size={size}
+        onClick={() => startTransition(importCatalog)}
+        disabled={busy}
+      >
         {busy ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
         {busy ? "Importing…" : "Import products"}
       </Button>
@@ -66,11 +74,22 @@ export function ImportButton({
   return (
     <Button
       variant="outline"
+      size={size}
       onClick={() => startTransition(importDocuments)}
       disabled={busy}
     >
       {busy ? <Loader2Icon className="animate-spin" /> : <ReceiptTextIcon />}
-      {busy ? "Reading invoices…" : "Import invoices & orders"}
+      {busy ? (
+        "Reading invoices…"
+      ) : (
+        <span>
+          Import
+          <span className={cn(compact && "max-sm:hidden")}>
+            {" "}
+            invoices & orders
+          </span>
+        </span>
+      )}
     </Button>
   );
 }

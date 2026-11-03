@@ -13,7 +13,7 @@ import {
 import { toast } from "sonner";
 import { ItemImage } from "@/components/item-image";
 import { OpenItemLink } from "@/components/item-links";
-import { ViewTab } from "@/components/section-tabs";
+import { ViewTabs } from "@/components/section-tabs";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -141,17 +141,16 @@ export function PricingTable({
             className="bg-background pl-8"
           />
         </div>
-        <div className="flex gap-1 overflow-x-auto">
-          <ViewTab current={view} value="all" onSelect={setView}>
-            For sale ({forSale.length})
-          </ViewTab>
-          <ViewTab current={view} value="attention" onSelect={setView}>
-            Needs attention ({attentionCount})
-          </ViewTab>
-          <ViewTab current={view} value="notForSale" onSelect={setView}>
-            Not for sale ({notForSaleCount})
-          </ViewTab>
-        </div>
+        <ViewTabs
+          label="Which items"
+          current={view}
+          onSelect={setView}
+          views={[
+            { value: "all", label: `For sale (${forSale.length})` },
+            { value: "attention", label: `Needs attention (${attentionCount})` },
+            { value: "notForSale", label: `Not for sale (${notForSaleCount})` },
+          ]}
+        />
       </div>
 
       {groups.length === 0 && (

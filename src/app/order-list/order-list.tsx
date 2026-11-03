@@ -38,7 +38,7 @@ import { toast } from "sonner";
 import { DiscountBadge } from "@/components/discount-badge";
 import { ItemImage } from "@/components/item-image";
 import { OpenItemLink } from "@/components/item-links";
-import { ViewTab } from "@/components/section-tabs";
+import { ViewTabs } from "@/components/section-tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -444,17 +444,19 @@ export function OrderList({
               One-off
             </Button>
           </div>
-          <div className="flex gap-1">
-            <ViewTab current={view} value="all" onSelect={setView}>
-              All
-            </ViewTab>
-            <ViewTab current={view} value="order" onSelect={setView}>
-              To order{lineCount > 0 && ` (${lineCount})`}
-            </ViewTab>
-            <ViewTab current={view} value="archived" onSelect={setView}>
-              Archived
-            </ViewTab>
-          </div>
+          <ViewTabs
+            label="Which items"
+            current={view}
+            onSelect={setView}
+            views={[
+              { value: "all", label: "All" },
+              {
+                value: "order",
+                label: lineCount > 0 ? `To order (${lineCount})` : "To order",
+              },
+              { value: "archived", label: "Archived" },
+            ]}
+          />
         </div>
       )}
 
