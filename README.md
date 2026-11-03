@@ -104,9 +104,11 @@ closed to new customers since 2026, so `GOOGLE_CSE_KEY`/`GOOGLE_CSE_ID` only
 work for accounts that already had access. Repeated searches are cached for
 15 minutes.
 
-Every row in the catalog (`/catalog`, and the import detail pages) also has a
-cart button for a one-off order: pick an amount and it goes straight into the
-supplier cart, without touching the assortment.
+Every row in the catalog (`/catalog`, and the import detail pages) also has an
+add button: pick an amount and it goes on a draft as a one-off, which becomes
+the draft you carry on with. Adding the same product again raises the amount.
+"Straight to Rust's cart" is the other way out, for what doesn't need following
+up on: it goes into the supplier cart without showing up on any order.
 
 ## The item dialog
 

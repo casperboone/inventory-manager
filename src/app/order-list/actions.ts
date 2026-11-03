@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { z } from "zod";
 import { db } from "@/db";
@@ -25,6 +25,8 @@ import { revalidateItemScreens } from "@/lib/items/revalidate";
 import { logger } from "@/lib/logger";
 import { deleteItemImage, saveItemImageFromUrl } from "@/lib/images/store";
 import {
+  getCurrentDraftId,
+  getDrafts,
   getOrderReview,
   rememberCurrentOrder,
   resolveDraft,
@@ -95,6 +97,8 @@ const oneOffSchema = z
     name: z.string().trim().max(200),
     source: z.string().trim().max(200),
     quantity: z.number().positive(),
+    // Added from outside the order list, so that's the draft to carry on with.
+    remember: z.boolean().optional(),
   })
   .refine((value) => value.productId != null || value.name !== "", {
     message: "Pick a product or type what it is.",
@@ -116,24 +120,53 @@ export async function addOneOff(input: OneOffInput) {
         where: eq(supplierProducts.id, productId),
       });
       if (!product) return { ok: false as const, error: "Product not found." };
-      await db.insert(orderLines).values({
-        orderId,
-        itemNo: product.itemNo,
-        supplierId: product.supplierId,
-        name: product.description,
-        unitOfMeasure: product.unitOfMeasure,
-        unitPrice: product.unitPrice,
-        quantity,
-      });
+      // The same product again is more of it, not a second line.
+      const [existing] = await db
+        .update(orderLines)
+        .set({ quantity: sql`${orderLines.quantity} + ${quantity}` })
+        .where(
+          and(
+            eq(orderLines.orderId, orderId),
+            isNull(orderLines.itemId),
+            eq(orderLines.itemNo, product.itemNo)
+          )
+        )
+        .returning({ id: orderLines.id });
+      if (!existing) {
+        await db.insert(orderLines).values({
+          orderId,
+          itemNo: product.itemNo,
+          supplierId: product.supplierId,
+          name: product.description,
+          unitOfMeasure: product.unitOfMeasure,
+          unitPrice: product.unitPrice,
+          quantity,
+        });
+      }
     } else {
       await db
         .insert(orderLines)
         .values({ orderId, name, source: source || null, quantity });
     }
+    if (parsed.data.remember) await rememberCurrentOrder(orderId);
     revalidateOrderScreens();
     return { ok: true as const, orderId };
   } catch (error) {
     return failure(error, "Could not add the one-off.");
+  }
+}
+
+// The drafts to choose from when adding something from elsewhere in the app.
+export async function loadOrderChoices() {
+  try {
+    const drafts = await getDrafts();
+    return {
+      ok: true as const,
+      drafts,
+      currentOrderId: await getCurrentDraftId(drafts),
+    };
+  } catch (error) {
+    return failure(error, "Could not load the orders.");
   }
 }
 

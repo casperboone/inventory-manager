@@ -1,9 +1,9 @@
 import Link from "next/link";
 import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
+import { AddProduct } from "@/components/add-product";
 import { DiscountBadge } from "@/components/discount-badge";
 import { isOnOurList, ItemLinks } from "@/components/item-links";
 import { ProductImage } from "@/components/product-image";
-import { QuickAddToCart } from "@/components/quick-add-to-cart";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -152,7 +152,8 @@ export function ProductsTable({
                 />
               </TableCell>
               <TableCell className="py-1 pr-1 text-right">
-                <QuickAddToCart
+                <AddProduct
+                  productId={product.id}
                   itemNo={product.itemNo}
                   description={product.description || product.itemNo}
                   unitOfMeasure={product.unitOfMeasure}
