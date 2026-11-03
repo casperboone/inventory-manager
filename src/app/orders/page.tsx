@@ -87,12 +87,12 @@ function TrackedRow({ tracked }: { tracked: TrackedOrder }) {
             stage={progress.stage}
             closed={order.status === "closed"}
           />
-          {progress.shortCount > 0 && (
+          {progress.shortCount > 0 && order.status !== "closed" && (
             <Badge variant="outline" className="border-destructive/40 text-destructive">
               {progress.shortCount} not delivered
             </Badge>
           )}
-          {progress.overdue && (
+          {progress.overdue && order.status !== "closed" && (
             <Badge variant="outline" className="border-amber-300 text-amber-700">
               No invoice yet
             </Badge>
