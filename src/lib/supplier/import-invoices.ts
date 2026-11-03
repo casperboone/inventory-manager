@@ -9,6 +9,7 @@ import {
   supplierOrders,
 } from "@/db/schema";
 import { logger } from "@/lib/logger";
+import { linkOrderDocuments } from "@/lib/orders/link";
 import {
   fetchInvoiceLines,
   fetchInvoiceList,
@@ -95,6 +96,15 @@ export async function importSupplierInvoices(
     progress.openOrdersCount = openOrders;
     const openEntries = await refreshOpenEntries();
     progress.openEntriesCount = openEntries;
+
+    // The documents themselves are in by now, and matter more than this.
+    await linkOrderDocuments().catch((error) => {
+      logger.warn(
+        `Linking documents to orders failed: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    });
 
     const remaining = invoices.remaining + creditMemos.remaining;
     await finishImportRun(run.id, { ...progress, remainingCount: remaining });
