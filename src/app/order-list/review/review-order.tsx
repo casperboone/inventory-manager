@@ -5,6 +5,8 @@ import Link from "next/link";
 import {
   AlertTriangleIcon,
   CheckCircle2Icon,
+  CheckIcon,
+  CopyIcon,
   Loader2Icon,
   ShoppingCartIcon,
   StickyNoteIcon,
@@ -16,32 +18,45 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import type { OrderReview } from "@/lib/assortment/queries";
 import { formatNumber, formatPrice } from "@/lib/format";
-import { addOrderToSupplierCart, type CartSubmitResult } from "../actions";
+import type { OrderReview, ReviewLine } from "@/lib/orders/drafts";
+import { orderLabel } from "@/lib/orders/reference";
+import { sendOrderToCart, type CartSubmitResult } from "../actions";
 
-export function ReviewOrder({ review }: { review: OrderReview }) {
-  const [resetAmounts, setResetAmounts] = useState(true);
+const RUST_CHECKOUT = "https://b2b-rustfood.dinonline.nl/orderconfirm";
+
+const amounts = (lines: ReviewLine[]) =>
+  lines.map((line) => ({ id: line.id, quantity: line.quantity }));
+
+export function ReviewOrder({
+  review,
+  notes,
+  inCart,
+}: {
+  review: OrderReview;
+  notes: { id: number; name: string; categoryName: string }[];
+  // Other orders that may still be sitting in the cart.
+  inCart: { id: number; name: string | null }[];
+}) {
   const [clearNotes, setClearNotes] = useState(false);
   const [result, setResult] = useState<CartSubmitResult | null>(null);
   const [pending, startTransition] = useTransition();
 
   const total = review.lines.reduce(
-    (sum, line) => sum + line.quantityToBuy * (line.unitPrice ?? 0),
-    0
+    (sum, line) => sum + line.quantity * (line.unitPrice ?? 0),
+    0,
   );
-  const needsAttention = review.manual.length + review.notes.length;
+  const needsAttention = review.manual.length + notes.length;
+  const nothingToSend = review.lines.length === 0 && review.manual.length === 0;
 
   function submit() {
     startTransition(async () => {
-      const response = await addOrderToSupplierCart({
-        resetAmounts,
+      const response = await sendOrderToCart({
+        orderId: review.order.id,
         clearNotes,
         // Order exactly what is on screen, nothing else.
-        reviewed: review.lines.map((line) => ({
-          id: line.id,
-          quantity: line.quantityToBuy,
-        })),
+        reviewed: amounts(review.lines),
+        reviewedManual: amounts(review.manual),
       });
       if (!response.ok) {
         toast.error(response.error);
@@ -63,13 +78,27 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Review order</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Review {orderLabel(review.order)}
+        </h1>
         <p className="text-sm text-muted-foreground">
           {review.lines.length} product
           {review.lines.length === 1 ? "" : "s"} for the supplier cart
           {total > 0 && <> · about {formatPrice(total)}</>}
         </p>
       </div>
+
+      {inCart.length > 0 && review.lines.length > 0 && (
+        <p className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50/60 px-3 py-2 text-sm dark:border-amber-900/50 dark:bg-amber-950/20">
+          <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-amber-600" />
+          <span>
+            {inCart.map(orderLabel).join(", ")} went to the cart too, and Rust
+            shows nothing for {inCart.length === 1 ? "it" : "them"} yet. If{" "}
+            {inCart.length === 1 ? "it hasn't" : "they haven't"} been placed,
+            this ends up on the same Rust order.
+          </span>
+        </p>
+      )}
 
       {needsAttention > 0 && (
         <section className="overflow-hidden rounded-lg border border-amber-300 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20">
@@ -78,32 +107,35 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
             Handle yourself ({needsAttention})
           </h2>
           <ul className="divide-y divide-amber-200/70 dark:divide-amber-900/40">
-            {review.manual.map((item) => (
-              <li key={item.id} className="flex items-center gap-3 px-3 py-2">
+            {review.manual.map((line) => (
+              <li key={line.id} className="flex items-center gap-3 px-3 py-2">
                 <ItemImage
-                  itemId={item.id}
-                  itemNo={item.itemNo}
-                  hasOwnImage={item.hasOwnImage}
-                  imageStatus={item.imageStatus}
-                  alt={item.name}
+                  itemId={line.itemId ?? 0}
+                  itemNo={line.itemNo}
+                  hasOwnImage={line.hasOwnImage}
+                  imageStatus={line.imageStatus}
+                  alt={line.name}
                 />
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium">{item.name}</div>
+                  <div className="font-medium">{line.name}</div>
                   <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                    <span>{item.categoryName}</span>
+                    {line.categoryName && <span>{line.categoryName}</span>}
+                    {line.source && <span>{line.source}</span>}
                     <Badge variant="outline" className="text-amber-700">
-                      {item.supplierRemoved
+                      {line.supplierRemoved
                         ? "Gone from catalog"
-                        : "Not linked"}
+                        : line.itemId
+                          ? "Not linked"
+                          : "One-off"}
                     </Badge>
                   </div>
                 </div>
                 <span className="text-lg font-semibold tabular-nums">
-                  {formatNumber(item.quantityToBuy)}
+                  {formatNumber(line.quantity)}
                 </span>
               </li>
             ))}
-            {review.notes.map((note) => (
+            {notes.map((note) => (
               <li
                 key={note.id}
                 className="flex items-center gap-3 px-3 py-2 text-sm"
@@ -129,7 +161,7 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
         <ul className="divide-y">
           {review.lines.length === 0 && (
             <li className="px-3 py-8 text-center text-sm text-muted-foreground">
-              No products with an amount yet.{" "}
+              Nothing for the cart.{" "}
               <Link href="/order-list" className="underline underline-offset-4">
                 Back to the list
               </Link>
@@ -138,27 +170,33 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
           {review.lines.map((line) => (
             <li key={line.id} className="flex items-center gap-3 px-3 py-2">
               <ItemImage
-                itemId={line.id}
+                itemId={line.itemId ?? 0}
                 itemNo={line.itemNo}
                 hasOwnImage={line.hasOwnImage}
                 imageStatus={line.imageStatus}
-                alt={line.supplierDescription ?? line.name}
+                alt={line.name}
               />
               <div className="min-w-0 flex-1">
                 <div className="font-medium">{line.name}</div>
                 <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
-                  <span>{line.categoryName}</span>
+                  {line.categoryName && <span>{line.categoryName}</span>}
                   <span>{line.itemNo}</span>
                   {line.unitOfMeasure && <span>{line.unitOfMeasure}</span>}
+                  {!line.itemId && <Badge variant="outline">One-off</Badge>}
                 </div>
+                {line.cartError && (
+                  <div className="text-xs text-destructive">
+                    Last try: {line.cartError}
+                  </div>
+                )}
               </div>
               <div className="text-right">
                 <div className="text-lg font-semibold tabular-nums">
-                  {formatNumber(line.quantityToBuy)}
+                  {formatNumber(line.quantity)}
                 </div>
                 {line.unitPrice != null && (
                   <div className="text-xs text-muted-foreground tabular-nums">
-                    {formatPrice(line.quantityToBuy * line.unitPrice)}
+                    {formatPrice(line.quantity * line.unitPrice)}
                   </div>
                 )}
               </div>
@@ -170,13 +208,6 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
       <section className="space-y-3 rounded-lg border bg-background p-4">
         <Label className="flex items-center gap-3 font-normal">
           <Checkbox
-            checked={resetAmounts}
-            onCheckedChange={(checked) => setResetAmounts(checked === true)}
-          />
-          Reset all amounts afterwards
-        </Label>
-        <Label className="flex items-center gap-3 font-normal">
-          <Checkbox
             checked={clearNotes}
             onCheckedChange={(checked) => setClearNotes(checked === true)}
           />
@@ -186,28 +217,59 @@ export function ReviewOrder({ review }: { review: OrderReview }) {
         <Button
           className="w-full"
           size="lg"
-          disabled={pending || review.lines.length === 0}
+          disabled={pending || nothingToSend}
           onClick={submit}
         >
           {pending ? (
             <Loader2Icon className="animate-spin" />
-          ) : (
+          ) : review.lines.length > 0 ? (
             <ShoppingCartIcon />
+          ) : (
+            <CheckIcon />
           )}
           {pending
             ? "Adding…"
-            : `Add all ${review.lines.length} to the supplier cart`}
+            : review.lines.length > 0
+              ? `Add all ${review.lines.length} to the supplier cart`
+              : "Mark as handled by me"}
         </Button>
         <p className="text-xs text-muted-foreground">
           The products land in the cart at Rust Food. You place the order there
-          yourself.
+          yourself. The order keeps these amounts, and you start a new one with
+          your next tap on the list.
         </p>
       </section>
     </div>
   );
 }
 
+function CopyReference({ reference }: { reference: string }) {
+  const [copied, setCopied] = useState(false);
+
+  return (
+    <Button
+      size="lg"
+      variant="outline"
+      className="font-mono"
+      onClick={async () => {
+        try {
+          await navigator.clipboard.writeText(reference);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        } catch {
+          toast.error(`Couldn't copy. Type it instead: ${reference}`);
+        }
+      }}
+    >
+      {copied ? <CheckIcon /> : <CopyIcon />}
+      {reference}
+    </Button>
+  );
+}
+
 function SubmitResult({ result }: { result: CartSubmitResult }) {
+  const reachedCart = result.added.length > 0;
+
   return (
     <div className="space-y-5">
       <div className="flex items-center gap-3">
@@ -218,12 +280,15 @@ function SubmitResult({ result }: { result: CartSubmitResult }) {
         )}
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            {result.failed.length === 0 ? "In the cart" : "Partly added"}
+            {result.failed.length > 0
+              ? "Partly added"
+              : reachedCart
+                ? "In the cart"
+                : "Done"}
           </h1>
           <p className="text-sm text-muted-foreground">
             {result.added.length} added
             {result.failed.length > 0 && `, ${result.failed.length} failed`}
-            {result.amountsReset > 0 && `, ${result.amountsReset} amounts reset`}
             {result.notesCleared > 0 && `, ${result.notesCleared} notes deleted`}
           </p>
           {result.cart?.totalItems != null && (
@@ -236,14 +301,33 @@ function SubmitResult({ result }: { result: CartSubmitResult }) {
         </div>
       </div>
 
+      {reachedCart && (
+        <section className="space-y-3 rounded-lg border bg-background p-4">
+          <p className="text-sm">
+            Paste this into <strong>Uw referentie</strong> at Rust&apos;s
+            checkout. It ties their order and invoice to this one.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <CopyReference reference={result.reference} />
+            <Button
+              size="lg"
+              nativeButton={false}
+              render={<a href={RUST_CHECKOUT} target="_blank" rel="noreferrer" />}
+            >
+              Open the cart at Rust Food
+            </Button>
+          </div>
+        </section>
+      )}
+
       {result.failed.length > 0 && (
         <section className="overflow-hidden rounded-lg border border-destructive/40 bg-destructive/5">
           <h2 className="border-b border-destructive/30 px-3 py-2 text-sm font-semibold">
-            Not added — do these yourself
+            Not added
           </h2>
           <ul className="divide-y divide-destructive/20">
-            {result.failed.map((line) => (
-              <li key={line.itemNo} className="px-3 py-2 text-sm">
+            {result.failed.map((line, index) => (
+              <li key={index} className="px-3 py-2 text-sm">
                 <div className="flex items-center gap-2 font-medium">
                   <XCircleIcon className="size-4 text-destructive" />
                   {line.name} ({line.itemNo}) × {formatNumber(line.quantity)}
@@ -254,6 +338,16 @@ function SubmitResult({ result }: { result: CartSubmitResult }) {
               </li>
             ))}
           </ul>
+          <p className="border-t border-destructive/30 px-3 py-2 text-xs text-muted-foreground">
+            These stay on the order. Try again from{" "}
+            <Link
+              href={`/order-list/review?order=${result.orderId}`}
+              className="underline underline-offset-4"
+            >
+              the review
+            </Link>{" "}
+            after a reload, or add them at Rust yourself.
+          </p>
         </section>
       )}
 
@@ -263,38 +357,29 @@ function SubmitResult({ result }: { result: CartSubmitResult }) {
             Added ({result.added.length})
           </h2>
           <ul className="divide-y">
-            {result.added.map((line) => (
+            {result.added.map((line, index) => (
               <li
-                key={line.itemNo}
+                key={index}
                 className="flex items-center gap-2 px-3 py-2 text-sm"
               >
                 <CheckCircle2Icon className="size-4 text-emerald-600" />
                 <span className="flex-1">{line.name}</span>
-                <span className="tabular-nums">× {formatNumber(line.quantity)}</span>
+                <span className="tabular-nums">
+                  × {formatNumber(line.quantity)}
+                </span>
               </li>
             ))}
           </ul>
         </section>
       )}
 
-      <div className="flex gap-2">
-        <Button nativeButton={false} render={<Link href="/order-list" />}>
-          Back to the list
-        </Button>
-        <Button
-          variant="outline"
-          nativeButton={false}
-          render={
-            <a
-              href="https://b2b-rustfood.dinonline.nl/orderconfirm"
-              target="_blank"
-              rel="noreferrer"
-            />
-          }
-        >
-          Open the cart at Rust Food
-        </Button>
-      </div>
+      <Button
+        variant="outline"
+        nativeButton={false}
+        render={<Link href="/order-list" />}
+      >
+        Back to the list
+      </Button>
     </div>
   );
 }

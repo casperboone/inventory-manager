@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   closestCenter,
   DndContext,
@@ -52,21 +51,26 @@ import {
   formatPrice,
   formatShortDate,
 } from "@/lib/format";
+import type { DraftSummary } from "@/lib/orders/drafts";
+import { orderLabel } from "@/lib/orders/reference";
 import type { LastBought } from "@/lib/products/purchases";
 import { parseTypedNumber } from "@/lib/numbers";
 import { cn } from "@/lib/utils";
 import {
-  clearOrderList,
+  clearDraft,
+  createDraft,
   createNote,
   deleteNote,
   reorderCategories,
   reorderItems,
-  setQuantityToBuy,
+  setLineQuantity,
+  switchDraft,
   updateNote,
 } from "./actions";
 import { ItemDialog, type ItemDialogState } from "@/app/items/item-dialog";
 
 const SAVE_DEBOUNCE_MS = 300;
+const NEW_ORDER = "new";
 type View = "all" | "order" | "archived";
 
 export function OrderList({
@@ -74,6 +78,9 @@ export function OrderList({
   archived,
   lastBought,
   initialItem,
+  drafts,
+  currentOrderId,
+  serverQuantities,
 }: {
   categories: AssortmentCategoryWithItems[];
   archived: AssortmentCategoryWithItems[];
@@ -81,6 +88,11 @@ export function OrderList({
   lastBought: Record<string, LastBought>;
   // From the URL: its dialog starts open, over the list it's in.
   initialItem: AssortmentRow | null;
+  drafts: DraftSummary[];
+  // Null until the first tap starts one.
+  currentOrderId: number | null;
+  // Per item, on the current draft.
+  serverQuantities: Record<number, number>;
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>(
@@ -96,8 +108,19 @@ export function OrderList({
   // Local order, applied on top of the server's until it catches up.
   const [categoryOrder, setCategoryOrder] = useState<number[] | null>(null);
   const [itemOrder, setItemOrder] = useState<Record<number, number[]>>({});
-  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const pendingSaves = useRef(
+    new Map<
+      number,
+      { timer: ReturnType<typeof setTimeout>; save: () => Promise<void> }
+    >(),
+  );
   const [, startTransition] = useTransition();
+  // Follows the first tap, which starts a draft, before the server's answer
+  // has come back round as a prop. A ref, so the next tap sees it right away.
+  const orderId = useRef(currentOrderId);
+  useEffect(() => {
+    orderId.current = currentOrderId;
+  }, [currentOrderId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -110,14 +133,6 @@ export function OrderList({
     }),
   );
 
-  const serverQuantities = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const category of categories) {
-      for (const item of category.items) map[item.id] = item.quantityToBuy;
-    }
-    return map;
-  }, [categories]);
-
   const quantityOf = (item: AssortmentRow) =>
     quantities[item.id] ?? serverQuantities[item.id] ?? 0;
   const noteTextOf = (item: AssortmentRow) => notes[item.id] ?? item.name;
@@ -127,21 +142,53 @@ export function OrderList({
   const edits = useRef<Record<number, number>>({});
 
   useEffect(() => {
-    const pending = timers.current;
+    const pending = pendingSaves.current;
     return () => {
-      for (const timer of pending.values()) clearTimeout(timer);
+      for (const { timer } of pending.values()) clearTimeout(timer);
     };
   }, []);
 
   function saveLater(id: number, save: () => Promise<void>) {
-    clearTimeout(timers.current.get(id));
-    timers.current.set(
-      id,
-      setTimeout(() => {
-        timers.current.delete(id);
+    clearTimeout(pendingSaves.current.get(id)?.timer);
+    pendingSaves.current.set(id, {
+      save,
+      timer: setTimeout(() => {
+        pendingSaves.current.delete(id);
         startTransition(save);
       }, SAVE_DEBOUNCE_MS),
-    );
+    });
+  }
+
+  // What was just tapped still belongs to the draft it was tapped on.
+  async function savePendingNow() {
+    const pending = [...pendingSaves.current.values()];
+    pendingSaves.current.clear();
+    for (const { timer, save } of pending) {
+      clearTimeout(timer);
+      await save();
+    }
+  }
+
+  function forgetEdits() {
+    edits.current = {};
+    setQuantities({});
+  }
+
+  function selectDraft(value: string) {
+    startTransition(async () => {
+      let result: { ok: true } | { ok: false; error: string };
+      if (value === NEW_ORDER) {
+        const name = window.prompt("Name for the new order (optional)");
+        if (name === null) return;
+        await savePendingNow();
+        result = await createDraft(name);
+      } else {
+        await savePendingNow();
+        result = await switchDraft(Number(value));
+      }
+      if (result.ok) forgetEdits();
+      else toast.error(result.error);
+    });
   }
 
   function adjustQuantity(item: AssortmentRow, delta: number) {
@@ -155,8 +202,10 @@ export function OrderList({
     setQuantities((current) => ({ ...current, [item.id]: next }));
 
     saveLater(item.id, async () => {
-      const result = await setQuantityToBuy(item.id, next);
-      if (!result.ok) {
+      const result = await setLineQuantity(item.id, next, orderId.current);
+      if (result.ok) {
+        orderId.current = result.orderId;
+      } else {
         toast.error(`${item.name}: ${result.error}`);
         delete edits.current[item.id];
         setQuantities((current) => {
@@ -330,6 +379,12 @@ export function OrderList({
               className="bg-background pl-8"
             />
           </div>
+          <DraftSwitcher
+            drafts={drafts}
+            currentOrderId={currentOrderId}
+            currentLines={orderLines.length}
+            onSelect={selectDraft}
+          />
           <div className="flex gap-1">
             <ViewTab current={view} value="all" onSelect={setView}>
               All
@@ -426,9 +481,22 @@ export function OrderList({
         <OrderSummaryBar
           lines={orderLines.length}
           total={orderTotal}
-          onCleared={() => {
-            edits.current = {};
-            setQuantities({});
+          onReview={async () => {
+            // The review reads the order from the server, so the last taps
+            // have to be there first.
+            await savePendingNow();
+            router.push(`/order-list/review?order=${orderId.current}`);
+          }}
+          onClear={async () => {
+            await savePendingNow();
+            if (orderId.current == null) return;
+            const result = await clearDraft(orderId.current);
+            if (result.ok) {
+              forgetEdits();
+              toast.success("List cleared");
+            } else {
+              toast.error(result.error);
+            }
           }}
         />
       )}
@@ -772,14 +840,54 @@ function NoteRow({
   );
 }
 
+// Which order the amounts are for. A plain select, which on a phone is the
+// system's own picker and works one-handed.
+function DraftSwitcher({
+  drafts,
+  currentOrderId,
+  currentLines,
+  onSelect,
+}: {
+  drafts: DraftSummary[];
+  currentOrderId: number | null;
+  // The server's count doesn't keep up with tapping.
+  currentLines: number;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <span className="text-muted-foreground">Order</span>
+      <select
+        value={currentOrderId ?? ""}
+        onChange={(e) => onSelect(e.target.value)}
+        aria-label="Order you're working on"
+        className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        {currentOrderId === null && (
+          <option value="">Starts with the first tap</option>
+        )}
+        {drafts.map((draft) => (
+          <option key={draft.id} value={draft.id}>
+            {orderLabel(draft)} (
+            {draft.id === currentOrderId ? currentLines : draft.lineCount})
+          </option>
+        ))}
+        <option value={NEW_ORDER}>New order…</option>
+      </select>
+    </label>
+  );
+}
+
 function OrderSummaryBar({
   lines,
   total,
-  onCleared,
+  onReview,
+  onClear,
 }: {
   lines: number;
   total: number;
-  onCleared: () => void;
+  onReview: () => Promise<void>;
+  onClear: () => Promise<void>;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -802,15 +910,7 @@ function OrderSummaryBar({
             disabled={pending}
             onClick={() => {
               if (!confirm("Set every amount back to zero?")) return;
-              startTransition(async () => {
-                const result = await clearOrderList();
-                if (result.ok) {
-                  onCleared();
-                  toast.success("List cleared");
-                } else {
-                  toast.error(result.error);
-                }
-              });
+              startTransition(onClear);
             }}
           >
             <XIcon />
@@ -818,8 +918,8 @@ function OrderSummaryBar({
           </Button>
           <Button
             size="sm"
-            nativeButton={false}
-            render={<Link href="/order-list/review" />}
+            disabled={pending}
+            onClick={() => startTransition(onReview)}
           >
             Review
             <ArrowRightIcon />

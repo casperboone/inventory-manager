@@ -1,12 +1,16 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq, gt } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
-import { assortmentCategories, assortmentItems } from "@/db/schema";
 import {
-  getOrderReview,
+  assortmentCategories,
+  assortmentItems,
+  orderLines,
+  orders,
+} from "@/db/schema";
+import {
   searchCatalogForPicker,
   type PickerProduct,
 } from "@/lib/assortment/queries";
@@ -17,6 +21,12 @@ import {
 import { revalidateItemScreens } from "@/lib/items/revalidate";
 import { logger } from "@/lib/logger";
 import { deleteItemImage, saveItemImageFromUrl } from "@/lib/images/store";
+import {
+  getOrderReview,
+  rememberCurrentOrder,
+  resolveDraft,
+} from "@/lib/orders/drafts";
+import { orderReference } from "@/lib/orders/reference";
 import { nextItemPosition } from "@/lib/positions";
 import {
   searchProductImages,
@@ -30,33 +40,83 @@ function failure(error: unknown, fallback: string) {
   };
 }
 
-// The order page edits this on every tap, so it stays deliberately small.
-export async function setQuantityToBuy(itemId: number, quantity: number) {
+function revalidateOrderScreens() {
+  revalidatePath("/order-list");
+  revalidatePath("/order-list/review");
+  revalidatePath("/orders");
+  revalidatePath("/orders/[id]", "page");
+}
+
+// The order page edits this on every tap, so it stays deliberately small: with
+// a draft in hand it's one statement. Without one, this tap starts it.
+export async function setLineQuantity(
+  itemId: number,
+  quantity: number,
+  orderId: number | null
+) {
   if (!Number.isFinite(quantity) || quantity < 0) {
     return { ok: false as const, error: "Invalid quantity." };
   }
   try {
-    await db
-      .update(assortmentItems)
-      .set({ quantityToBuy: quantity, updatedAt: new Date() })
-      .where(eq(assortmentItems.id, itemId));
+    const draftId = await resolveDraft(orderId);
+    if (quantity === 0) {
+      await db
+        .delete(orderLines)
+        .where(
+          and(eq(orderLines.orderId, draftId), eq(orderLines.itemId, itemId))
+        );
+    } else {
+      await db.run(sql`
+        insert into order_lines
+          (order_id, item_id, item_no, supplier_id, name, unit_of_measure, unit_price, quantity)
+        select ${draftId}, i.id, p.item_no, p.supplier_id, i.name, p.unit_of_measure, p.unit_price, ${quantity}
+        from assortment_items i
+        left join supplier_products p on p.id = i.supplier_product_id
+        where i.id = ${itemId} and i.kind = 'product'
+        on conflict (order_id, item_id) do update set quantity = excluded.quantity
+      `);
+    }
     // No revalidate: the page owns this value while you are tapping.
-    return { ok: true as const };
+    return { ok: true as const, orderId: draftId };
   } catch (error) {
     return failure(error, "Could not save the amount.");
   }
 }
 
-export async function clearOrderList() {
+export async function clearDraft(orderId: number) {
   try {
-    await db
-      .update(assortmentItems)
-      .set({ quantityToBuy: 0, updatedAt: new Date() })
-      .where(gt(assortmentItems.quantityToBuy, 0));
-    revalidatePath("/order-list");
+    await resolveDraft(orderId);
+    await db.delete(orderLines).where(eq(orderLines.orderId, orderId));
+    revalidateOrderScreens();
     return { ok: true as const };
   } catch (error) {
     return failure(error, "Could not clear the list.");
+  }
+}
+
+// A second order next to the current one, which becomes the one you work on.
+export async function createDraft(name: string) {
+  try {
+    const [created] = await db
+      .insert(orders)
+      .values({ name: name.trim().slice(0, 80) || null })
+      .returning({ id: orders.id });
+    await rememberCurrentOrder(created.id);
+    revalidateOrderScreens();
+    return { ok: true as const, orderId: created.id };
+  } catch (error) {
+    return failure(error, "Could not start the order.");
+  }
+}
+
+export async function switchDraft(orderId: number) {
+  try {
+    await resolveDraft(orderId);
+    await rememberCurrentOrder(orderId);
+    revalidatePath("/order-list");
+    return { ok: true as const };
+  } catch (error) {
+    return failure(error, "Could not switch orders.");
   }
 }
 
@@ -175,60 +235,94 @@ export async function reorderCategories(orderedIds: number[]) {
 
 export type CartSubmitResult = {
   ok: true;
+  orderId: number;
+  // To paste into "Uw referentie" at Rust's checkout.
+  reference: string;
   added: { name: string; itemNo: string; quantity: number }[];
   failed: { name: string; itemNo: string; quantity: number; error: string }[];
   notesCleared: number;
-  amountsReset: number;
   // The supplier's own cart totals after the last successful add.
   cart?: { totalItems?: number; totalQuantity?: number; totalPrice?: string };
 };
 
 // Sends the reviewed order lines to the supplier's cart in one call. The
-// caller passes exactly what was on screen; if the list has changed since,
-// nothing is sent — ordering should never include something unreviewed.
-export async function addOrderToSupplierCart(options: {
-  resetAmounts: boolean;
+// caller passes exactly what was on screen; if the order has changed since,
+// nothing is sent — ordering should never include something unreviewed. That
+// goes for the second time too: what's been sent doesn't count anymore, so
+// sending twice from the same screen is refused as well.
+export async function sendOrderToCart(options: {
+  orderId: number;
   clearNotes: boolean;
   reviewed: { id: number; quantity: number }[];
+  reviewedManual: { id: number; quantity: number }[];
 }): Promise<CartSubmitResult | { ok: false; error: string }> {
   try {
-    const { lines } = await getOrderReview();
-    if (lines.length === 0) {
+    const review = await getOrderReview(options.orderId);
+    if (!review || review.order.status === "closed") {
+      return { ok: false as const, error: "This order can't be sent anymore." };
+    }
+    const { lines, manual } = review;
+    if (lines.length === 0 && manual.length === 0) {
       return { ok: false as const, error: "There is nothing to order." };
     }
 
-    const reviewed = new Map(
-      options.reviewed.map((line) => [line.id, line.quantity])
-    );
-    const changed =
-      lines.length !== reviewed.size ||
-      lines.some((line) => reviewed.get(line.id) !== line.quantityToBuy);
-    if (changed) {
+    const differs = (
+      current: { id: number; quantity: number }[],
+      seen: { id: number; quantity: number }[]
+    ) => {
+      const amounts = new Map(seen.map((line) => [line.id, line.quantity]));
+      return (
+        current.length !== amounts.size ||
+        current.some((line) => amounts.get(line.id) !== line.quantity)
+      );
+    };
+    if (
+      differs(lines, options.reviewed) ||
+      differs(manual, options.reviewedManual)
+    ) {
       return {
         ok: false as const,
         error:
-          "The list changed while you were reviewing. Reload the page and check the order again.",
+          "The order changed while you were reviewing. Reload the page and check it again.",
       };
     }
 
     const added: CartSubmitResult["added"] = [];
     const failed: CartSubmitResult["failed"] = [];
+    const sentIds = new Set<number>();
+    const errors = new Map<number, string>();
     let cart: CartSubmitResult["cart"];
 
     // One request for the whole order instead of one per product. The
     // supplier refuses the batch as a whole over a single bad line, so
     // whatever does not come back accepted is retried on its own, which also
     // tells us which product was the problem.
-    const bulk = lines.filter((line) => line.supplierId != null);
+    //
+    // Two lines can be the same product (Queer Beer is on the list twice), and
+    // the cart has one amount per product: the portal's own page treats a
+    // repeat as an edit. So the cart gets each product once, with the total.
+    const products = new Map<string, typeof lines>();
+    for (const line of lines) {
+      products.set(line.itemNo!, [
+        ...(products.get(line.itemNo!) ?? []),
+        line,
+      ]);
+    }
+    const totalOf = (group: typeof lines) =>
+      group.reduce((sum, line) => sum + line.quantity, 0);
+
+    const bulk = [...products.values()].filter(
+      ([line]) => line.supplierId != null
+    );
     let accepted = new Set<string>();
     if (bulk.length > 0) {
       try {
         const result = await addManyToSupplierCart(
-          bulk.map((line) => ({
-            itemNo: line.itemNo!,
-            supplierId: line.supplierId!,
-            quantity: line.quantityToBuy,
-            unitOfMeasure: line.unitOfMeasure,
+          bulk.map((group) => ({
+            itemNo: group[0].itemNo!,
+            supplierId: group[0].supplierId!,
+            quantity: totalOf(group),
+            unitOfMeasure: group[0].unitOfMeasure,
           }))
         );
         accepted = new Set(result.added);
@@ -242,51 +336,62 @@ export async function addOrderToSupplierCart(options: {
       }
     }
 
-    for (const line of lines) {
-      if (accepted.has(line.itemNo!)) {
-        added.push({
-          name: line.name,
-          itemNo: line.itemNo!,
-          quantity: line.quantityToBuy,
-        });
-        continue;
+    for (const [itemNo, group] of products) {
+      let problem: string | null = null;
+      if (!accepted.has(itemNo)) {
+        try {
+          cart = await addToSupplierCart(itemNo, totalOf(group));
+        } catch (error) {
+          problem = error instanceof Error ? error.message : "Unknown error";
+        }
       }
-      try {
-        cart = await addToSupplierCart(line.itemNo!, line.quantityToBuy);
-        added.push({
-          name: line.name,
-          itemNo: line.itemNo!,
-          quantity: line.quantityToBuy,
-        });
-      } catch (error) {
-        failed.push({
-          name: line.name,
-          itemNo: line.itemNo!,
-          quantity: line.quantityToBuy,
-          error: error instanceof Error ? error.message : "Unknown error",
-        });
+      for (const line of group) {
+        const row = { name: line.name, itemNo, quantity: line.quantity };
+        if (problem) {
+          failed.push({ ...row, error: problem });
+          errors.set(line.id, problem);
+        } else {
+          added.push(row);
+          sentIds.add(line.id);
+        }
       }
     }
+    // Nothing to send of these, but they're dealt with as far as the order goes.
+    for (const line of manual) sentIds.add(line.id);
 
-    // Only clear what actually made it into the cart.
-    let amountsReset = 0;
-    if (options.resetAmounts && added.length > 0) {
-      const addedIds = lines
-        .filter((line) => added.some((row) => row.itemNo === line.itemNo))
-        .map((line) => line.id);
-      const statements: BatchItem<"sqlite">[] = addedIds.map((id) =>
-        db
-          .update(assortmentItems)
-          .set({ quantityToBuy: 0, updatedAt: new Date() })
-          .where(eq(assortmentItems.id, id))
-      );
-      if (statements.length > 0) {
-        await db.batch(
-          statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
-        );
-        amountsReset = statements.length;
+    // The order keeps what each line was at this moment, and only what made it
+    // counts as sent. Whatever failed stays on the order to send again.
+    const statements: BatchItem<"sqlite">[] = [...lines, ...manual].map(
+      (line) => {
+        const snapshot = {
+          name: line.name,
+          itemNo: line.itemNo,
+          supplierId: line.supplierId,
+          unitOfMeasure: line.unitOfMeasure,
+          unitPrice: line.unitPrice,
+          cartError: errors.get(line.id) ?? null,
+        };
+        return db
+          .update(orderLines)
+          .set(
+            sentIds.has(line.id)
+              ? { ...snapshot, sentQuantity: sql`${orderLines.quantity}` }
+              : snapshot
+          )
+          .where(eq(orderLines.id, line.id));
       }
+    );
+    if (sentIds.size > 0 && review.order.status === "draft") {
+      statements.push(
+        db
+          .update(orders)
+          .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
+          .where(eq(orders.id, options.orderId))
+      );
     }
+    await db.batch(
+      statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]
+    );
 
     // Notes are only dropped when the whole order went through.
     let notesCleared = 0;
@@ -298,14 +403,14 @@ export async function addOrderToSupplierCart(options: {
       notesCleared = removed.length;
     }
 
-    revalidatePath("/order-list");
-    revalidatePath("/order-list/review");
+    revalidateOrderScreens();
     return {
       ok: true as const,
+      orderId: options.orderId,
+      reference: orderReference(options.orderId),
       added,
       failed,
       notesCleared,
-      amountsReset,
       cart,
     };
   } catch (error) {
