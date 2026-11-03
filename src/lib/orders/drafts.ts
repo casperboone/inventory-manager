@@ -1,4 +1,13 @@
-import { and, count, desc, eq, inArray, isNotNull, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNotNull,
+  isNull,
+  sql,
+} from "drizzle-orm";
 import { cookies } from "next/headers";
 import { db } from "@/db";
 import {
@@ -99,6 +108,34 @@ export async function getDraftQuantities(
     .from(orderLines)
     .where(and(eq(orderLines.orderId, orderId), isNotNull(orderLines.itemId)));
   return Object.fromEntries(rows.map((row) => [row.itemId!, row.quantity]));
+}
+
+export type OneOff = {
+  id: number;
+  name: string;
+  itemNo: string | null;
+  unitOfMeasure: string | null;
+  unitPrice: number | null;
+  source: string | null;
+  quantity: number;
+};
+
+// What's on the order without being on the list.
+export async function getOneOffs(orderId: number | null): Promise<OneOff[]> {
+  if (orderId == null) return [];
+  return db
+    .select({
+      id: orderLines.id,
+      name: orderLines.name,
+      itemNo: orderLines.itemNo,
+      unitOfMeasure: orderLines.unitOfMeasure,
+      unitPrice: orderLines.unitPrice,
+      source: orderLines.source,
+      quantity: orderLines.quantity,
+    })
+    .from(orderLines)
+    .where(and(eq(orderLines.orderId, orderId), isNull(orderLines.itemId)))
+    .orderBy(orderLines.id);
 }
 
 // How much of an item is on drafts, for its page.

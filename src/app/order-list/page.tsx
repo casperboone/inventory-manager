@@ -7,6 +7,7 @@ import {
   getCurrentDraftId,
   getDraftQuantities,
   getDrafts,
+  getOneOffs,
 } from "@/lib/orders/drafts";
 import { getLastBought } from "@/lib/products/purchases";
 import { OrderList } from "./order-list";
@@ -28,7 +29,10 @@ export default async function OrderListPage(props: PageProps<"/order-list">) {
     getDrafts(),
   ]);
   const currentOrderId = await getCurrentDraftId(drafts);
-  const quantities = await getDraftQuantities(currentOrderId);
+  const [quantities, oneOffs] = await Promise.all([
+    getDraftQuantities(currentOrderId),
+    getOneOffs(currentOrderId),
+  ]);
 
   // Notes share the table with items but have no dialog.
   const itemId = parseItemParam(item);
@@ -50,6 +54,7 @@ export default async function OrderListPage(props: PageProps<"/order-list">) {
       drafts={drafts}
       currentOrderId={currentOrderId}
       serverQuantities={quantities}
+      oneOffs={oneOffs}
     />
   );
 }

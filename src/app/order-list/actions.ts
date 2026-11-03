@@ -3,13 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { and, eq, sql } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
+import { z } from "zod";
 import { db } from "@/db";
 import {
   assortmentCategories,
   assortmentItems,
   orderLines,
   orders,
+  supplierProducts,
 } from "@/db/schema";
+import { formatNumber } from "@/lib/format";
 import {
   searchCatalogForPicker,
   type PickerProduct,
@@ -80,6 +83,131 @@ export async function setLineQuantity(
     return { ok: true as const, orderId: draftId };
   } catch (error) {
     return failure(error, "Could not save the amount.");
+  }
+}
+
+const oneOffSchema = z
+  .object({
+    orderId: z.number().int().positive().nullable(),
+    // From the catalog: it goes to the cart and gets matched like anything else.
+    productId: z.number().int().positive().nullable(),
+    // Free text: yours to get, and to tick off when you have it.
+    name: z.string().trim().max(200),
+    source: z.string().trim().max(200),
+    quantity: z.number().positive(),
+  })
+  .refine((value) => value.productId != null || value.name !== "", {
+    message: "Pick a product or type what it is.",
+  });
+
+export type OneOffInput = z.input<typeof oneOffSchema>;
+
+// Something for this order only, which stays off the list.
+export async function addOneOff(input: OneOffInput) {
+  const parsed = oneOffSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false as const, error: z.prettifyError(parsed.error) };
+  }
+  const { productId, name, source, quantity } = parsed.data;
+  try {
+    const orderId = await resolveEditableOrder(parsed.data.orderId);
+    if (productId != null) {
+      const product = await db.query.supplierProducts.findFirst({
+        where: eq(supplierProducts.id, productId),
+      });
+      if (!product) return { ok: false as const, error: "Product not found." };
+      await db.insert(orderLines).values({
+        orderId,
+        itemNo: product.itemNo,
+        supplierId: product.supplierId,
+        name: product.description,
+        unitOfMeasure: product.unitOfMeasure,
+        unitPrice: product.unitPrice,
+        quantity,
+      });
+    } else {
+      await db
+        .insert(orderLines)
+        .values({ orderId, name, source: source || null, quantity });
+    }
+    revalidateOrderScreens();
+    return { ok: true as const, orderId };
+  } catch (error) {
+    return failure(error, "Could not add the one-off.");
+  }
+}
+
+// Sent orders can still grow: forgot something, or it needs more after all.
+// What has gone out can't be taken back from here, so that's the lower limit.
+async function resolveEditableOrder(orderId: number | null) {
+  if (orderId != null) {
+    const order = await db.query.orders.findFirst({
+      where: eq(orders.id, orderId),
+      columns: { status: true },
+    });
+    if (order?.status === "sent") return orderId;
+  }
+  return resolveDraft(orderId);
+}
+
+export async function setOneOffQuantity(lineId: number, quantity: number) {
+  if (!Number.isFinite(quantity) || quantity < 0) {
+    return { ok: false as const, error: "Invalid quantity." };
+  }
+  try {
+    const line = await db.query.orderLines.findFirst({
+      where: eq(orderLines.id, lineId),
+      columns: { sentQuantity: true },
+    });
+    if (!line) return { ok: false as const, error: "That line is gone." };
+    if (quantity < line.sentQuantity) {
+      return {
+        ok: false as const,
+        error: `${formatNumber(line.sentQuantity)} already went out.`,
+      };
+    }
+    if (quantity === 0) {
+      await db.delete(orderLines).where(eq(orderLines.id, lineId));
+      revalidateOrderScreens();
+    } else {
+      await db
+        .update(orderLines)
+        .set({ quantity })
+        .where(eq(orderLines.id, lineId));
+    }
+    return { ok: true as const };
+  } catch (error) {
+    return failure(error, "Could not save the amount.");
+  }
+}
+
+// A note that turned out to be something to get. It moves to the order, so it
+// doesn't stay behind to be handled twice.
+export async function noteToOneOff(noteId: number, orderId: number | null) {
+  try {
+    const note = await db.query.assortmentItems.findFirst({
+      where: and(
+        eq(assortmentItems.id, noteId),
+        eq(assortmentItems.kind, "note")
+      ),
+      columns: { name: true },
+    });
+    if (!note) return { ok: false as const, error: "That note is gone." };
+    const name = note.name.trim();
+    if (!name) {
+      return { ok: false as const, error: "Write something in the note first." };
+    }
+    const draftId = await resolveDraft(orderId);
+    await db.batch([
+      db
+        .insert(orderLines)
+        .values({ orderId: draftId, name, quantity: 1 }),
+      db.delete(assortmentItems).where(eq(assortmentItems.id, noteId)),
+    ]);
+    revalidateOrderScreens();
+    return { ok: true as const, orderId: draftId };
+  } catch (error) {
+    return failure(error, "Could not move the note to the order.");
   }
 }
 
