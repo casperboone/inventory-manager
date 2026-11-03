@@ -3,6 +3,12 @@ import {
   getAssortment,
 } from "@/lib/assortment/queries";
 import { parseItemParam } from "@/lib/items/params";
+import {
+  getCurrentDraftId,
+  getDraftQuantities,
+  getDrafts,
+  getOneOffs,
+} from "@/lib/orders/drafts";
 import { getLastBought } from "@/lib/products/purchases";
 import { OrderList } from "./order-list";
 
@@ -17,9 +23,15 @@ export const metadata = { title: "Order list · Inventory Manager" };
 
 export default async function OrderListPage(props: PageProps<"/order-list">) {
   const { item } = await props.searchParams;
-  const [categories, archived] = await Promise.all([
+  const [categories, archived, drafts] = await Promise.all([
     getAssortment(),
     getArchivedAssortment(),
+    getDrafts(),
+  ]);
+  const currentOrderId = await getCurrentDraftId(drafts);
+  const [quantities, oneOffs] = await Promise.all([
+    getDraftQuantities(currentOrderId),
+    getOneOffs(currentOrderId),
   ]);
 
   // Notes share the table with items but have no dialog.
@@ -39,6 +51,10 @@ export default async function OrderListPage(props: PageProps<"/order-list">) {
       archived={archived}
       lastBought={lastBought}
       initialItem={initialItem}
+      drafts={drafts}
+      currentOrderId={currentOrderId}
+      serverQuantities={quantities}
+      oneOffs={oneOffs}
     />
   );
 }

@@ -18,6 +18,7 @@ import {
   formatPrice,
 } from "@/lib/format";
 import { getItemDetail, getItemName, type ItemLink } from "@/lib/items/queries";
+import { getDraftedQuantity } from "@/lib/orders/drafts";
 import { priceToneStyle, signalChips } from "@/lib/pricing/signals";
 import type { DiscountStatus } from "@/lib/products/discount-types";
 import { cn } from "@/lib/utils";
@@ -117,6 +118,7 @@ export default async function ItemPage(props: PageProps<"/items/[id]">) {
 
   const { item, orderCategory, product, pricing } = detail;
   const { row } = pricing;
+  const drafted = await getDraftedQuantity(item.id);
   const removed = product?.removedAt != null;
   const unit = product?.unitOfMeasure?.toLowerCase() ?? "units";
 
@@ -182,9 +184,7 @@ export default async function ItemPage(props: PageProps<"/items/[id]">) {
                 {item.target != null ? `${formatNumber(item.target)} ${unit}` : "—"}
               </Fact>
               <Fact label="To buy">
-                {item.quantityToBuy > 0
-                  ? `${formatNumber(item.quantityToBuy)} ${unit}`
-                  : "Nothing"}
+                {drafted > 0 ? `${formatNumber(drafted)} ${unit}` : "Nothing"}
               </Fact>
               <Fact label="Order category">{orderCategory}</Fact>
               {item.note && (

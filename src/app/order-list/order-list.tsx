@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
   closestCenter,
   DndContext,
@@ -27,6 +26,7 @@ import {
   ArrowRightIcon,
   CheckIcon,
   GripVerticalIcon,
+  ListPlusIcon,
   MinusIcon,
   PlusIcon,
   SearchIcon,
@@ -52,21 +52,29 @@ import {
   formatPrice,
   formatShortDate,
 } from "@/lib/format";
+import type { DraftSummary, OneOff } from "@/lib/orders/drafts";
+import { orderLabel } from "@/lib/orders/reference";
 import type { LastBought } from "@/lib/products/purchases";
 import { parseTypedNumber } from "@/lib/numbers";
 import { cn } from "@/lib/utils";
 import {
-  clearOrderList,
+  clearDraft,
+  createDraft,
   createNote,
   deleteNote,
+  noteToOneOff,
   reorderCategories,
   reorderItems,
-  setQuantityToBuy,
+  setLineQuantity,
+  setOneOffQuantity,
+  switchDraft,
   updateNote,
 } from "./actions";
+import { OneOffDialog } from "./one-off-dialog";
 import { ItemDialog, type ItemDialogState } from "@/app/items/item-dialog";
 
 const SAVE_DEBOUNCE_MS = 300;
+const NEW_ORDER = "new";
 type View = "all" | "order" | "archived";
 
 export function OrderList({
@@ -74,6 +82,10 @@ export function OrderList({
   archived,
   lastBought,
   initialItem,
+  drafts,
+  currentOrderId,
+  serverQuantities,
+  oneOffs,
 }: {
   categories: AssortmentCategoryWithItems[];
   archived: AssortmentCategoryWithItems[];
@@ -81,6 +93,12 @@ export function OrderList({
   lastBought: Record<string, LastBought>;
   // From the URL: its dialog starts open, over the list it's in.
   initialItem: AssortmentRow | null;
+  drafts: DraftSummary[];
+  // Null until the first tap starts one.
+  currentOrderId: number | null;
+  // Per item, on the current draft.
+  serverQuantities: Record<number, number>;
+  oneOffs: OneOff[];
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>(
@@ -93,11 +111,24 @@ export function OrderList({
   );
   const [quantities, setQuantities] = useState<Record<number, number>>({});
   const [notes, setNotes] = useState<Record<number, string>>({});
+  const [oneOffAmounts, setOneOffAmounts] = useState<Record<number, number>>({});
+  const [addingOneOff, setAddingOneOff] = useState(false);
   // Local order, applied on top of the server's until it catches up.
   const [categoryOrder, setCategoryOrder] = useState<number[] | null>(null);
   const [itemOrder, setItemOrder] = useState<Record<number, number[]>>({});
-  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const pendingSaves = useRef(
+    new Map<
+      number,
+      { timer: ReturnType<typeof setTimeout>; save: () => Promise<void> }
+    >(),
+  );
   const [, startTransition] = useTransition();
+  // Follows the first tap, which starts a draft, before the server's answer
+  // has come back round as a prop. A ref, so the next tap sees it right away.
+  const orderId = useRef(currentOrderId);
+  useEffect(() => {
+    orderId.current = currentOrderId;
+  }, [currentOrderId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -110,14 +141,6 @@ export function OrderList({
     }),
   );
 
-  const serverQuantities = useMemo(() => {
-    const map: Record<number, number> = {};
-    for (const category of categories) {
-      for (const item of category.items) map[item.id] = item.quantityToBuy;
-    }
-    return map;
-  }, [categories]);
-
   const quantityOf = (item: AssortmentRow) =>
     quantities[item.id] ?? serverQuantities[item.id] ?? 0;
   const noteTextOf = (item: AssortmentRow) => notes[item.id] ?? item.name;
@@ -127,21 +150,49 @@ export function OrderList({
   const edits = useRef<Record<number, number>>({});
 
   useEffect(() => {
-    const pending = timers.current;
+    const pending = pendingSaves.current;
     return () => {
-      for (const timer of pending.values()) clearTimeout(timer);
+      for (const { timer } of pending.values()) clearTimeout(timer);
     };
   }, []);
 
   function saveLater(id: number, save: () => Promise<void>) {
-    clearTimeout(timers.current.get(id));
-    timers.current.set(
-      id,
-      setTimeout(() => {
-        timers.current.delete(id);
+    clearTimeout(pendingSaves.current.get(id)?.timer);
+    pendingSaves.current.set(id, {
+      save,
+      timer: setTimeout(() => {
+        pendingSaves.current.delete(id);
         startTransition(save);
       }, SAVE_DEBOUNCE_MS),
-    );
+    });
+  }
+
+  // What was just tapped still belongs to the draft it was tapped on.
+  async function savePendingNow() {
+    const pending = [...pendingSaves.current.values()];
+    pendingSaves.current.clear();
+    for (const { timer, save } of pending) {
+      clearTimeout(timer);
+      await save();
+    }
+  }
+
+  function forgetEdits() {
+    edits.current = {};
+    setQuantities({});
+    setOneOffAmounts({});
+  }
+
+  function selectDraft(value: string) {
+    startTransition(async () => {
+      await savePendingNow();
+      const result =
+        value === NEW_ORDER
+          ? await createDraft()
+          : await switchDraft(Number(value));
+      if (result.ok) forgetEdits();
+      else toast.error(result.error);
+    });
   }
 
   function adjustQuantity(item: AssortmentRow, delta: number) {
@@ -155,8 +206,10 @@ export function OrderList({
     setQuantities((current) => ({ ...current, [item.id]: next }));
 
     saveLater(item.id, async () => {
-      const result = await setQuantityToBuy(item.id, next);
-      if (!result.ok) {
+      const result = await setLineQuantity(item.id, next, orderId.current);
+      if (result.ok) {
+        orderId.current = result.orderId;
+      } else {
         toast.error(`${item.name}: ${result.error}`);
         delete edits.current[item.id];
         setQuantities((current) => {
@@ -165,6 +218,35 @@ export function OrderList({
           return rest;
         });
       }
+    });
+  }
+
+  const oneOffAmountOf = (line: OneOff) =>
+    oneOffAmounts[line.id] ?? line.quantity;
+
+  function changeOneOff(line: OneOff, quantity: number) {
+    const next = Math.max(0, Math.round(quantity * 100) / 100);
+    setOneOffAmounts((current) => ({ ...current, [line.id]: next }));
+    // Line ids and item ids are separate counters; this keeps them apart.
+    saveLater(-line.id, async () => {
+      const result = await setOneOffQuantity(line.id, next);
+      if (!result.ok) {
+        toast.error(`${line.name}: ${result.error}`);
+        setOneOffAmounts((current) => {
+          const rest = { ...current };
+          delete rest[line.id];
+          return rest;
+        });
+      }
+    });
+  }
+
+  function moveNoteToOrder(item: AssortmentRow) {
+    startTransition(async () => {
+      await savePendingNow();
+      const result = await noteToOneOff(item.id, orderId.current);
+      if (result.ok) orderId.current = result.orderId;
+      else toast.error(result.error);
     });
   }
 
@@ -238,10 +320,25 @@ export function OrderList({
     category.items.filter((item) => item.kind === "product"),
   );
   const orderLines = products.filter((item) => quantityOf(item) > 0);
-  const orderTotal = orderLines.reduce(
-    (sum, item) => sum + quantityOf(item) * (item.unitPrice ?? 0),
-    0,
+  const liveOneOffs = oneOffs.filter((line) => oneOffAmountOf(line) > 0);
+  const lineCount = orderLines.length + liveOneOffs.length;
+  const orderTotal =
+    orderLines.reduce(
+      (sum, item) => sum + quantityOf(item) * (item.unitPrice ?? 0),
+      0,
+    ) +
+    liveOneOffs.reduce(
+      (sum, line) => sum + oneOffAmountOf(line) * (line.unitPrice ?? 0),
+      0,
+    );
+  const visibleOneOffs = oneOffs.filter(
+    (line) =>
+      !term ||
+      line.name.toLowerCase().includes(term) ||
+      line.itemNo?.includes(term),
   );
+  const showOneOffs =
+    !reordering && view !== "archived" && visibleOneOffs.length > 0;
 
   function onDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -330,12 +427,29 @@ export function OrderList({
               className="bg-background pl-8"
             />
           </div>
+          <div className="flex items-center gap-2">
+            <DraftSwitcher
+              drafts={drafts}
+              currentOrderId={currentOrderId}
+              currentLines={lineCount}
+              onSelect={selectDraft}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={() => setAddingOneOff(true)}
+            >
+              <PlusIcon />
+              One-off
+            </Button>
+          </div>
           <div className="flex gap-1">
             <ViewTab current={view} value="all" onSelect={setView}>
               All
             </ViewTab>
             <ViewTab current={view} value="order" onSelect={setView}>
-              To order{orderLines.length > 0 && ` (${orderLines.length})`}
+              To order{lineCount > 0 && ` (${lineCount})`}
             </ViewTab>
             <ViewTab current={view} value="archived" onSelect={setView}>
               Archived
@@ -344,7 +458,25 @@ export function OrderList({
         </div>
       )}
 
-      {visible.length === 0 && (
+      {showOneOffs && (
+        <section className="mb-4 overflow-hidden rounded-lg border bg-background">
+          <h2 className="border-b bg-muted/50 px-3 py-2.5 text-xs font-semibold tracking-wide uppercase">
+            One-offs
+          </h2>
+          <ul className="divide-y">
+            {visibleOneOffs.map((line) => (
+              <OneOffRow
+                key={line.id}
+                line={line}
+                quantity={oneOffAmountOf(line)}
+                onChange={(value) => changeOneOff(line, value)}
+              />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {visible.length === 0 && !showOneOffs && (
         <p className="rounded-lg border bg-background px-4 py-8 text-center text-sm text-muted-foreground">
           {view === "order"
             ? "Nothing to order yet."
@@ -391,6 +523,7 @@ export function OrderList({
                           reordering={reordering}
                           onChange={(text) => changeNote(item, text)}
                           onDelete={() => removeRow(item)}
+                          onMoveToOrder={() => moveNoteToOrder(item)}
                         />
                       ) : (
                         <ItemRow
@@ -422,16 +555,39 @@ export function OrderList({
         </SortableContext>
       </DndContext>
 
-      {orderLines.length > 0 && !reordering && (
+      {lineCount > 0 && !reordering && (
         <OrderSummaryBar
-          lines={orderLines.length}
+          lines={lineCount}
           total={orderTotal}
-          onCleared={() => {
-            edits.current = {};
-            setQuantities({});
+          onReview={async () => {
+            // The review reads the order from the server, so the last taps
+            // have to be there first.
+            await savePendingNow();
+            router.push(`/order-list/review?order=${orderId.current}`);
+          }}
+          onClear={async () => {
+            await savePendingNow();
+            if (orderId.current == null) return;
+            const result = await clearDraft(orderId.current);
+            if (result.ok) {
+              forgetEdits();
+              toast.success("List cleared");
+            } else {
+              toast.error(result.error);
+            }
           }}
         />
       )}
+
+      <OneOffDialog
+        open={addingOneOff}
+        orderId={currentOrderId}
+        onAdded={(id) => {
+          orderId.current = id;
+          setAddingOneOff(false);
+        }}
+        onClose={() => setAddingOneOff(false)}
+      />
 
       <ItemDialog
         state={dialog}
@@ -706,18 +862,91 @@ function ItemRow({
   );
 }
 
+function OneOffRow({
+  line,
+  quantity,
+  onChange,
+}: {
+  line: OneOff;
+  quantity: number;
+  onChange: (quantity: number) => void;
+}) {
+  return (
+    <li
+      className={cn(
+        "flex items-center gap-2 px-2 py-2 sm:gap-3 sm:px-3",
+        quantity > 0 && "bg-primary/5",
+      )}
+    >
+      <div className="min-w-0 flex-1">
+        <div className="line-clamp-2 font-medium">{line.name}</div>
+        <div className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+          {line.itemNo ? (
+            <>
+              <span>{line.itemNo}</span>
+              {line.unitOfMeasure && <span>{line.unitOfMeasure}</span>}
+              {line.unitPrice != null && (
+                <span>{formatPrice(line.unitPrice)}</span>
+              )}
+            </>
+          ) : (
+            <span>{line.source ?? "Free text"}</span>
+          )}
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5 sm:gap-1">
+        <Button
+          variant="outline"
+          size="icon"
+          className="size-9"
+          onClick={() => onChange(quantity - 1)}
+          disabled={quantity <= 0}
+          aria-label={`One less ${line.name}`}
+        >
+          <MinusIcon />
+        </Button>
+        <input
+          value={quantity === 0 ? "" : formatInputNumber(quantity)}
+          onChange={(e) => {
+            if (e.target.value.trim() === "") return onChange(0);
+            const parsed = parseTypedNumber(e.target.value);
+            if (parsed != null) onChange(parsed);
+          }}
+          inputMode="decimal"
+          placeholder="0"
+          aria-label={`Amount ${line.name}`}
+          className={cn(
+            "h-9 w-9 rounded-md border bg-background text-center text-sm tabular-nums outline-none focus-visible:ring-3 focus-visible:ring-ring/50 sm:w-11",
+            quantity > 0 && "border-primary font-semibold",
+          )}
+        />
+        <Button
+          size="icon"
+          className="size-9"
+          onClick={() => onChange(quantity + 1)}
+          aria-label={`One more ${line.name}`}
+        >
+          <PlusIcon />
+        </Button>
+      </div>
+    </li>
+  );
+}
+
 function NoteRow({
   item,
   text,
   reordering,
   onChange,
   onDelete,
+  onMoveToOrder,
 }: {
   item: AssortmentRow;
   text: string;
   reordering: boolean;
   onChange: (text: string) => void;
   onDelete: () => void;
+  onMoveToOrder: () => void;
 }) {
   const {
     attributes,
@@ -761,6 +990,16 @@ function NoteRow({
             variant="ghost"
             size="icon"
             className="size-8 text-muted-foreground"
+            onClick={onMoveToOrder}
+            disabled={text.trim() === ""}
+            aria-label={`Make "${text}" a one-off on the order`}
+          >
+            <ListPlusIcon className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground"
             onClick={onDelete}
             aria-label="Delete note"
           >
@@ -772,14 +1011,54 @@ function NoteRow({
   );
 }
 
+// Which order the amounts are for. A plain select, which on a phone is the
+// system's own picker and works one-handed.
+function DraftSwitcher({
+  drafts,
+  currentOrderId,
+  currentLines,
+  onSelect,
+}: {
+  drafts: DraftSummary[];
+  currentOrderId: number | null;
+  // The server's count doesn't keep up with tapping.
+  currentLines: number;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm">
+      <span className="text-muted-foreground">Order</span>
+      <select
+        value={currentOrderId ?? ""}
+        onChange={(e) => onSelect(e.target.value)}
+        aria-label="Order you're working on"
+        className="h-8 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      >
+        {currentOrderId === null && (
+          <option value="">Starts with the first tap</option>
+        )}
+        {drafts.map((draft) => (
+          <option key={draft.id} value={draft.id}>
+            {orderLabel(draft)} (
+            {draft.id === currentOrderId ? currentLines : draft.lineCount})
+          </option>
+        ))}
+        <option value={NEW_ORDER}>New order…</option>
+      </select>
+    </label>
+  );
+}
+
 function OrderSummaryBar({
   lines,
   total,
-  onCleared,
+  onReview,
+  onClear,
 }: {
   lines: number;
   total: number;
-  onCleared: () => void;
+  onReview: () => Promise<void>;
+  onClear: () => Promise<void>;
 }) {
   const [pending, startTransition] = useTransition();
 
@@ -802,15 +1081,7 @@ function OrderSummaryBar({
             disabled={pending}
             onClick={() => {
               if (!confirm("Set every amount back to zero?")) return;
-              startTransition(async () => {
-                const result = await clearOrderList();
-                if (result.ok) {
-                  onCleared();
-                  toast.success("List cleared");
-                } else {
-                  toast.error(result.error);
-                }
-              });
+              startTransition(onClear);
             }}
           >
             <XIcon />
@@ -818,8 +1089,8 @@ function OrderSummaryBar({
           </Button>
           <Button
             size="sm"
-            nativeButton={false}
-            render={<Link href="/order-list/review" />}
+            disabled={pending}
+            onClick={() => startTransition(onReview)}
           >
             Review
             <ArrowRightIcon />

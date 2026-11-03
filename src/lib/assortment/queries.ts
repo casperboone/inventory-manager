@@ -15,7 +15,6 @@ export type AssortmentRow = {
   kind: "product" | "note";
   name: string;
   target: number | null;
-  quantityToBuy: number;
   note: string | null;
   archivedAt: Date | null;
   categoryId: number;
@@ -47,7 +46,6 @@ async function selectItems(archived: boolean) {
       kind: assortmentItems.kind,
       name: assortmentItems.name,
       target: assortmentItems.target,
-      quantityToBuy: assortmentItems.quantityToBuy,
       note: assortmentItems.note,
       archivedAt: assortmentItems.archivedAt,
       categoryId: assortmentItems.categoryId,
@@ -106,7 +104,6 @@ function groupByCategory(
       kind: row.kind,
       name: row.name,
       target: row.target,
-      quantityToBuy: row.quantityToBuy,
       note: row.note,
       archivedAt: row.archivedAt,
       categoryId: row.categoryId,
@@ -176,28 +173,16 @@ export type PickerProduct = Awaited<
   ReturnType<typeof searchCatalogForPicker>
 >[number];
 
-export type OrderReview = {
-  // Lines that can be added to the supplier cart automatically.
-  lines: (AssortmentRow & { categoryName: string })[];
-  // Products with an amount but no usable catalog link: order these by hand.
-  manual: (AssortmentRow & { categoryName: string })[];
-  // Every note, since notes are always something to handle yourself.
-  notes: (AssortmentRow & { categoryName: string })[];
-};
-
-export async function getOrderReview(): Promise<OrderReview> {
+// Every note, since notes are always something to handle yourself.
+export async function getNotes() {
   const categories = await getAssortment();
-  const rows = categories.flatMap((category) =>
-    category.items.map((item) => ({ ...item, categoryName: category.name }))
+  return categories.flatMap((category) =>
+    category.items
+      .filter((item) => item.kind === "note")
+      .map((item) => ({
+        id: item.id,
+        name: item.name,
+        categoryName: category.name,
+      }))
   );
-
-  const withAmount = rows.filter(
-    (row) => row.kind === "product" && row.quantityToBuy > 0
-  );
-
-  return {
-    lines: withAmount.filter((row) => row.itemNo && !row.supplierRemoved),
-    manual: withAmount.filter((row) => !row.itemNo || row.supplierRemoved),
-    notes: rows.filter((row) => row.kind === "note"),
-  };
 }

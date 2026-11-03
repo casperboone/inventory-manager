@@ -161,10 +161,31 @@ line total *after* the discount ("regeltotaal"); the last two are empty in
 practice.
 
 What is filled in for us and what is not: `Amount_Including_VAT` and the
-delivery dates on orders are real, `Your_Reference` and `Salesperson_Code`
-are always null (we never send a reference and have no account manager).
-They are stored anyway, since they cost nothing and the alternative is
-another pass over every document later.
+delivery dates on orders are real, `Salesperson_Code` is always null (we have
+no account manager), and so has `Your_Reference` been so far. They are stored
+anyway, since they cost nothing and the alternative is another pass over every
+document later.
+
+`Your_Reference` is what the "Uw referentie" field at checkout fills in
+(`#YourReference`, at most 35 characters). The app shows `IM-<order id>` to
+paste there, and links whatever comes back carrying it to that order. Two
+things to know:
+
+- **The app can't set it for you.** The page saves the field with
+  `POST /OrderConfirm/temporarySave` (`fieldName`, `fieldData`, answers `true`);
+  `PlaceOrder` itself only sends `warningConfirmed`. But that value belongs to
+  the login that saved it: tried once on 2026-11-01, with an empty cart, it
+  showed in the saving session and not in a fresh login. The app and your
+  browser are separate logins, so it has to be pasted. The app doesn't call this
+  endpoint.
+- **Not yet seen on a real order.** The order and invoice lists both have the
+  column, but whether a pasted reference reaches them only shows on the next
+  order placed. Until then, and for `VORD` orders, matching on date and products
+  does the work.
+
+`VORD…` orders are created by Rust themselves, sometimes from our web orders, so
+they don't carry a reference. `WEB…` orders are placed in the webshop. Of the 10
+orders whose invoice was known in November 2026, each had exactly one invoice.
 
 An invoice does not say which order it came from, anywhere — not in the
 list, not in its lines, not in its PDF. The outstanding list does, in its
@@ -202,7 +223,18 @@ We keep our own assortment, so the portal's is deliberately left alone.
   cached as blobs; a cold fetch can take seconds, which is why the proxy
   answers `202` and fetches in the background.
 - An order that gets invoiced disappears from the open-order list, so its
-  rows are dropped and the invoice becomes the authority.
+  rows in `supplier_invoices` are dropped and the invoice becomes the
+  authority. A copy stays in `supplier_orders`, for tracking what became of our
+  own orders; order lists and discounts don't read it.
+- There are no delivery notes in the portal. "Delivered" can only mean
+  "invoiced", which is why `src/lib/orders/matching.ts` calls a line missing only
+  once its Rust order has an invoice and has left the open list.
+- Invoices carry lines that aren't products: deposits (every description with
+  `EMBALLAGE`), the fuel surcharge (item `8`, `BRANDSTOFTOESLAG`) and corrections
+  (`DIVERSE`). Negative product lines on an invoice are returns, usually of an
+  earlier delivery. On a credit note a positive quantity is what got credited.
+- An item number can come back as something else years later (24005 has been
+  both Peachtree and a shot glass), so compare them only within a limited period.
 
 ## Re-checking any of this
 

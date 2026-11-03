@@ -22,7 +22,7 @@ import { ProductFilters } from "./product-filters";
 // page, so they get the platform maximum instead of the default.
 export const maxDuration = 60;
 
-export const metadata = { title: "Supplier catalog · Inventory Manager" };
+export const metadata = { title: "Rust catalog · Inventory Manager" };
 
 function first(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -93,7 +93,7 @@ export default async function CatalogPage(props: PageProps<"/catalog">) {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Supplier catalog
+            Rust catalog
           </h1>
           <SyncStatusLine status={sync} />
         </div>

@@ -1,12 +1,15 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, notInArray } from "drizzle-orm";
 import type { BatchItem } from "drizzle-orm/batch";
 import { db } from "@/db";
 import {
   supplierInvoiceLines,
   supplierInvoices,
   supplierOpenEntries,
+  supplierOrderLines,
+  supplierOrders,
 } from "@/db/schema";
 import { logger } from "@/lib/logger";
+import { linkOrderDocuments } from "@/lib/orders/link";
 import {
   fetchInvoiceLines,
   fetchInvoiceList,
@@ -93,6 +96,15 @@ export async function importSupplierInvoices(
     progress.openOrdersCount = openOrders;
     const openEntries = await refreshOpenEntries();
     progress.openEntriesCount = openEntries;
+
+    // The documents themselves are in by now, and matter more than this.
+    await linkOrderDocuments().catch((error) => {
+      logger.warn(
+        `Linking documents to orders failed: ${
+          error instanceof Error ? error.message : error
+        }`
+      );
+    });
 
     const remaining = invoices.remaining + creditMemos.remaining;
     await finishImportRun(run.id, { ...progress, remainingCount: remaining });
@@ -247,7 +259,6 @@ async function refreshOpenOrders(): Promise<number> {
       ...orders.map((order) => order.documentNo),
     ]),
   ];
-  if (replaced.length === 0) return 0;
 
   const statements: BatchItem<"sqlite">[] = [
     db
@@ -259,10 +270,65 @@ async function refreshOpenOrders(): Promise<number> {
     ...fetched.flatMap(({ order, lines }) =>
       insertDocument(order, lines, "order")
     ),
+    ...keepSupplierOrders(fetched),
   ];
   await db.batch(statements as [BatchItem<"sqlite">, ...BatchItem<"sqlite">[]]);
 
   return orders.length;
+}
+
+// The rows above are gone once an order is invoiced. Tracking our own orders
+// needs to know later what Rust accepted, so a copy stays behind, with the
+// moment it left the open list.
+function keepSupplierOrders(
+  fetched: { order: InvoiceHeader; lines: InvoiceLine[] }[]
+): BatchItem<"sqlite">[] {
+  const numbers = fetched.map(({ order }) => order.documentNo);
+  return [
+    db
+      .update(supplierOrders)
+      .set({ leftOpenListAt: new Date() })
+      .where(
+        and(
+          isNull(supplierOrders.leftOpenListAt),
+          notInArray(supplierOrders.orderNo, numbers)
+        )
+      ),
+    ...fetched.flatMap(({ order, lines }) => {
+      const header = {
+        orderDate: order.documentDate,
+        amount: order.amount,
+        amountIncludingVat: order.amountIncludingVat,
+        yourReference: order.yourReference,
+        requestedDeliveryDate: order.requestedDeliveryDate,
+        promisedDeliveryDate: order.promisedDeliveryDate,
+        leftOpenListAt: null,
+      };
+      return [
+        db
+          .insert(supplierOrders)
+          .values({ orderNo: order.documentNo, ...header })
+          .onConflictDoUpdate({
+            target: supplierOrders.orderNo,
+            set: header,
+          }),
+        db
+          .delete(supplierOrderLines)
+          .where(eq(supplierOrderLines.orderNo, order.documentNo)),
+        ...lines.map((line) =>
+          db.insert(supplierOrderLines).values({
+            orderNo: order.documentNo,
+            itemNo: line.itemNo,
+            description: line.description,
+            quantity: line.quantity,
+            unitPrice: line.unitPrice,
+            discountPercent: line.discountPercent,
+            amount: line.amount,
+          })
+        ),
+      ];
+    }),
+  ];
 }
 
 // Outstanding payments change without us doing anything (they are settled by

@@ -1,9 +1,14 @@
 "use server";
 
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "@/db";
-import { assortmentCategories, assortmentItems } from "@/db/schema";
+import {
+  assortmentCategories,
+  assortmentItems,
+  orderLines,
+  orders,
+} from "@/db/schema";
 import { getItemDialogData } from "@/lib/items/queries";
 import { revalidateItemScreens } from "@/lib/items/revalidate";
 import { nextCategoryPosition, nextItemPosition } from "@/lib/positions";
@@ -112,17 +117,31 @@ export async function saveItem(input: ItemInput) {
   }
 }
 
+// What's still being put together shouldn't include an item that's going away.
+// What was sent is history, and keeps its own copy of the item's details.
+function removeFromDrafts(itemId: number) {
+  return db.delete(orderLines).where(
+    and(
+      eq(orderLines.itemId, itemId),
+      inArray(
+        orderLines.orderId,
+        db
+          .select({ id: orders.id })
+          .from(orders)
+          .where(eq(orders.status, "draft"))
+      )
+    )
+  );
+}
+
 export async function setItemArchived(itemId: number, archived: boolean) {
   try {
-    await db
+    const update = db
       .update(assortmentItems)
-      .set({
-        archivedAt: archived ? new Date() : null,
-        // An archived item shouldn't linger on the order list.
-        ...(archived ? { quantityToBuy: 0 } : {}),
-        updatedAt: new Date(),
-      })
+      .set({ archivedAt: archived ? new Date() : null, updatedAt: new Date() })
       .where(eq(assortmentItems.id, itemId));
+    if (archived) await db.batch([removeFromDrafts(itemId), update]);
+    else await update;
     revalidateItemScreens();
     return { ok: true as const };
   } catch (error) {
@@ -132,7 +151,14 @@ export async function setItemArchived(itemId: number, archived: boolean) {
 
 export async function deleteItem(itemId: number) {
   try {
-    await db.delete(assortmentItems).where(eq(assortmentItems.id, itemId));
+    await db.batch([
+      removeFromDrafts(itemId),
+      db
+        .update(orderLines)
+        .set({ itemId: null })
+        .where(eq(orderLines.itemId, itemId)),
+      db.delete(assortmentItems).where(eq(assortmentItems.id, itemId)),
+    ]);
     revalidateItemScreens();
     return { ok: true as const };
   } catch (error) {
